@@ -1,0 +1,601 @@
+<template>
+    <div class="view-search-container">
+        <header class="view-header">
+            <div class="back-button" @click="$router.push('/search')">
+                <span class="icon">←</span> Back to Searches
+            </div>
+            <h1 class="view-title">Search Results</h1>
+            <div class="results-count">{{ jobs.length }} Jobs Found</div>
+            <div class="sort">
+                <span class="sort-label">Sort by:</span>
+                <select v-model="sortDirection" @change="sortJobs">
+                    <option value="asc">Ascending</option>
+                    <option value="desc">Descending</option>
+                </select>
+                <select v-model="sortPriority" @change="sortJobs">
+                    <option v-for="p in priorityOptions" :value="p">{{ p }}</option>
+                </select>
+                <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs">
+                    <option v-for="option in sortOptions" :value="option">{{ option }}</option>
+                </select>
+            </div>
+        </header>
+
+        <div v-if="loading" class="loading-state">
+            <div class="loader"></div>
+            <p>Processing results...</p>
+        </div>
+
+        <div v-else-if="jobs.length === 0" class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h2>No jobs found</h2>
+            <p>Try adjusting your search parameters or enabling more scrapers.</p>
+            <button class="primary-button" @click="$router.push('/search')">Go Back</button>
+        </div>
+
+        <!-- Job Details Sidebar Overlay -->
+        <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
+        <div :class="['job-full', { 'active': selectedJob }]">
+            <div v-if="selectedJob" class="job-full-content">
+                <button class="close-sidebar" @click="closeJobCard">✕</button>
+                <div class="job-full-header">
+                    <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
+                    <div class="job-full-company">{{ selectedJob.company }}</div>
+                </div>
+                <div class="job-full-meta">
+                    <div class="job-full-meta-item" v-if="selectedJob.location">
+                        <span class="meta-label">Location:</span> {{ selectedJob.location }}
+                    </div>
+                    <div class="job-full-meta-item" v-if="selectedJob.salaryRange">
+                        <span class="meta-label">Salary:</span> {{ selectedJob.salaryRange }} {{ selectedJob.salaryType
+                        }}
+                    </div>
+                    <div class="job-full-meta-item" v-if="selectedJob.datePosted">
+                        <span class="meta-label">Posted:</span> {{ selectedJob.datePosted }}
+                    </div>
+                    <div class="job-full-meta-item" v-if="selectedJob.yearsOfExperience">
+                        <span class="meta-label">Experience:</span> {{ selectedJob.yearsOfExperience }}
+                    </div>
+                </div>
+                <hr class="divider">
+                <div class="job-full-description" v-html="selectedJob.description"></div>
+                <div class="job-full-footer">
+                    <a v-if="selectedJob.applyLink || selectedJob.url" :href="selectedJob.applyLink || selectedJob.url"
+                        target="_blank" class="primary-button apply-large">
+                        Apply for this position
+                    </a>
+                    <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)" target="_blank"
+                        class="find-employees">
+                        Find Employees Who Work Here
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid remains visible -->
+        <div v-if="!loading && jobs.length > 0" class="job-grid">
+            <div v-for="(job, index) in jobs" :key="index" class="job-card">
+                <div class="job-content" @click="openJobCard(job)">
+                    <div v-if="job.image" class="job-image">
+                        <img :src="job.image" :alt="job.company">
+                    </div>
+                    <div class="job-header" :class="{ 'with-image': job.image }">
+                        <div class="job-title-row">
+                            <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
+                            <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource }}</span>
+                        </div>
+                        <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
+                    </div>
+
+                    <div class="job-meta">
+                        <div v-if="job.location" class="meta-item">
+                            {{ job.location }}
+                        </div>
+                        <div v-if="job.salaryRange" class="meta-item">
+                            {{ job.salaryRange }} {{ job.salaryType }}
+                        </div>
+                        <div v-if="job.salaryType !== 'yearly' && getYearlyEstimate(job)"
+                            class="meta-item yearly-estimate">
+                            {{ getYearlyEstimate(job) }} / year
+                        </div>
+                        <div v-if="job.datePosted" class="meta-item">
+                            {{ job.datePosted }}
+                        </div>
+                        <div v-if="job.yearsOfExperience" class="meta-item">
+                            {{ job.yearsOfExperience }}
+                        </div>
+                    </div>
+
+                    <div v-if="job.description" class="job-description" v-html="job.description"></div>
+
+                    <div class="job-footer">
+                        <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
+                            class="apply-button">
+                            Apply Now
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+const jobs = ref<any[]>([])
+const loading = ref(true)
+const selectedJob = ref<any>(null)
+const sortOptions = ref([
+    'experience',
+    'salary',
+    'date',
+])
+
+const sortOrder = ref(['experience', 'salary'])
+const priorityOptions = ref([1, 2])
+const sortPriority = ref(1)
+const sortDirection = ref('asc')
+
+function parseNumeric(val: any): number[] | null {
+    if (typeof val === 'number') return [val];
+    if (!val || typeof val !== 'string') return null;
+    const cleaned = val.replace(/[^0-9.-]/g, '');
+    if (cleaned.includes('-')) {
+        const parts = cleaned.split('-').map(p => parseFloat(p)).filter(p => !isNaN(p));
+        if (parts.length === 0) return null;
+        //return parts.reduce((a, b) => a + b, 0) / parts.length;
+        return parts;
+    }
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? null : [parsed];
+}
+
+function calculateYearlySalary(job: any): number[] | null {
+    const baseVal = parseNumeric(job.salaryRange);
+    if (baseVal === null) return null;
+
+    const type = (job.salaryType || '').toLowerCase();
+    // 40 hours per week * 52 weeks per year = 2080 hours per year
+    if (type === 'hourly') return baseVal.map(value => value * 2080);
+    if (type === 'week' || type === 'weekly') return baseVal.map(value => value * 52);
+    if (type === 'month' || type === 'monthly') return baseVal.map(value => value * 12);
+    return baseVal; // Assume yearly if unspecified or already yearly
+}
+
+const getYearlyEstimate = (job: any) => {
+    const yearly = calculateYearlySalary(job);
+    if (yearly === null || yearly[0] === undefined) return '';
+    const type = (job.salaryType || '').toLowerCase();
+    if (['yearly', 'annual', 'year'].includes(type)) return `≈ $${Math.round(yearly[0]).toLocaleString()} ${yearly[1] ? '- $' + Math.round(yearly[1]).toLocaleString() : ''}`;
+    return `≈ $${Math.round(yearly[0]).toLocaleString()} ${yearly[1] ? '- $' + Math.round(yearly[1]).toLocaleString() : ''}`;
+}
+
+const sortJobs = () => {
+    const getVal = (job: any, criterion: string | undefined) => {
+        if (!criterion) return null;
+        if (criterion === 'experience') return parseNumeric(job.yearsOfExperience)
+        if (criterion === 'salary') return calculateYearlySalary(job)?.[0] // use the lower bound of the salary for sorting
+        if (criterion === 'date') return job.datePosted
+        return null
+    }
+
+    const compareBy = (a: any, b: any, criterion: string | undefined) => {
+        if (!criterion) return 0;
+        const valA = getVal(a, criterion)
+        const valB = getVal(b, criterion)
+
+        const isNilA = valA === undefined || valA === null;
+        const isNilB = valB === undefined || valB === null;
+
+        if (isNilA && isNilB) return 0;
+        if (isNilA) return sortDirection.value === 'asc' ? 1 : -1;
+        if (isNilB) return sortDirection.value === 'asc' ? -1 : 1;
+
+        if (valA === valB) return 0;
+        return sortDirection.value === 'asc' ? ((valA as number) - (valB as number)) : ((valB as number) - (valA as number));
+    }
+
+    jobs.value.sort((a, b) => {
+        const primary = Array.isArray(sortOrder.value) ? sortOrder.value[0] : sortOrder.value;
+        let result = compareBy(a, b, primary);
+
+        if (result === 0 && Array.isArray(sortOrder.value) && sortOrder.value[1]) {
+            result = compareBy(a, b, sortOrder.value[1]);
+        }
+
+        return result;
+    })
+}
+
+const openJobCard = (job: any) => {
+    selectedJob.value = job
+}
+
+const getLinkedInSearchUrl = (company: string) => {
+    const query = `site:linkedin.com/in "${company}"`
+    return `https://www.google.com/search?q=${encodeURIComponent(query)}`
+}
+
+const closeJobCard = () => {
+    selectedJob.value = null
+}
+
+onMounted(() => {
+    try {
+        const stateResults = window.history.state?.results
+        if (stateResults) {
+            const parsedResults = JSON.parse(stateResults)
+            jobs.value = Array.isArray(parsedResults) ? parsedResults : []
+        }
+    } catch (e) {
+        console.error('Failed to parse search results:', e)
+    } finally {
+        loading.value = false
+    }
+})
+</script>
+
+<style scoped>
+/* Job Sidebar Overlay */
+.job-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+}
+
+.job-full {
+    position: fixed;
+    top: 0;
+    right: -70%;
+    /* Start hidden off-screen */
+    width: 70%;
+    height: 100vh;
+    background: white;
+    z-index: 1001;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+    transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.job-full.active {
+    right: 0;
+}
+
+.job-full-content {
+    padding: 60px 40px;
+    height: 100%;
+    overflow-y: auto;
+    position: relative;
+}
+
+.close-sidebar {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: #f1f5f9;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    color: #475569;
+}
+
+.close-sidebar:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.job-full-header {
+    margin-bottom: 30px;
+}
+
+.job-full-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+    margin-bottom: 12px;
+}
+
+.job-full-company {
+    font-size: 20px;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.job-full-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 30px;
+}
+
+.job-full-meta-item {
+    font-size: 15px;
+    color: #475569;
+    background: #f8fafc;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid #f1f5f9;
+}
+
+.meta-label {
+    font-weight: 700;
+    color: #64748b;
+    margin-right: 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.divider {
+    border: 0;
+    border-top: 1px solid #e2e8f0;
+    margin: 30px 0;
+}
+
+.job-full-description {
+    font-size: 16px;
+    line-height: 1.8;
+    color: #334155;
+}
+
+.job-full-footer {
+    margin-top: 50px;
+    padding-top: 30px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.apply-large {
+    width: 100%;
+    padding: 18px !important;
+    font-size: 18px !important;
+    text-align: center;
+    background: #3b82f6;
+}
+
+.view-search-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+.view-header {
+    margin-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.back-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-size: 14px;
+}
+
+.back-button:hover {
+    color: #3b82f6;
+}
+
+.view-title {
+    font-size: 36px;
+    font-weight: 800;
+    margin: 0;
+    color: #1e293b;
+}
+
+.results-count {
+    font-size: 16px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.job-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 24px;
+}
+
+.job-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.job-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+    border-color: #3b82f6;
+}
+
+.job-image {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    width: 60px;
+    height: 60px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 2;
+}
+
+.job-image img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.job-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.job-header {
+    margin-bottom: 16px;
+}
+
+.job-header.with-image {
+    padding-left: 75px;
+    /* Space for the logo */
+}
+
+.job-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.job-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.4;
+    flex: 1;
+}
+
+.scraper-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.job-company {
+    font-size: 16px;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.job-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.meta-item {
+    font-size: 13px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.job-description {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.6;
+    margin-bottom: 24px;
+    flex: 1;
+    /* Line Clamping */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.job-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.apply-button {
+    background: #3b82f6;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.apply-button:hover {
+    background: #2563eb;
+}
+
+.loading-state,
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+}
+
+.loader {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3b82f6;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.primary-button {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+}
+</style>
