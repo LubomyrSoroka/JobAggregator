@@ -65,17 +65,24 @@
                 <div class="search-config-area">
                     <div class="search-config-scroll">
                         <div class="search-params">
-                            <div class="form-group">
+                            <!-- <div class="form-group">
                                 <label>Prompt</label>
                                 <textarea v-model="searchFilters.prompt"
                                     placeholder="e.g. Find the years of experience required of this job: ${{description}}"></textarea>
                                 <small>The AI will filter your results based on this description.</small>
-                            </div>
-                            <div class="form-group">
+                            </div> -->
+                            <!-- <div class="form-group">
                                 <label>Response Schema</label>
                                 <textarea v-model="searchFilters.responseSchema"
                                     placeholder='e.g. {"years_of_experience": "number"}'></textarea>
                                 <small>Define the structure of the AI's response.</small>
+                            </div> -->
+                            <div class="form-group">
+                                <label>Years of Experience</label>
+                                <input type="checkbox" v-model="searchFilters.getMissingYearsOfExperience">
+                                <label>Salary</label>
+                                <input type="checkbox" v-model="searchFilters.getMissingSalary">
+                                <small>The AI will try to find missing data in the job description.</small>
                             </div>
                         </div>
                     </div>
@@ -111,10 +118,11 @@ const tempConfigs = ref<ScraperConfig[]>([]);
 const originalName = ref('');
 const activeTab = ref('scrapers');
 const searchFilters = ref({
-    prompt: '',
-    responseSchema: ''
+    // prompt: '',
+    // responseSchema: '',
+    getMissingYearsOfExperience: false,
+    getMissingSalary: false
 });
-
 
 onMounted(() => {
     scraperNames.value = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
@@ -137,13 +145,17 @@ const openSearchMenu = (currentSearchName?: string) => {
     const search = savedSearches.value.find(s => s.name === currentSearchName);
     if (search && search.filters) {
         searchFilters.value = {
-            prompt: search.filters.prompt || '',
-            responseSchema: search.filters.responseSchema || ''
+            // prompt: search.filters.prompt || '',
+            // responseSchema: search.filters.responseSchema || '',
+            getMissingYearsOfExperience: search.filters.getMissingYearsOfExperience || false,
+            getMissingSalary: search.filters.getMissingSalary || false
         };
     } else {
         searchFilters.value = {
-            prompt: '',
-            responseSchema: ''
+            // prompt: '',
+            // responseSchema: '',
+            getMissingYearsOfExperience: false,
+            getMissingSalary: false
         };
     }
 
@@ -228,142 +240,14 @@ const deleteSearch = () => {
         closeSearchWindow();
     }
 }
-const runSearch = async () => {
+const runSearch = () => {
     saveSearch();
-    const currentSearch = savedSearches.value.find(s => s.name === searchName.value);
-    let results: any[] = [];
-
-    if (currentSearch) {
-        const scraperPromises = currentSearch.scraperParameters
-            .filter(config => config.enabled)
-            .map(async (scraperConfig) => {
-                const scraperData = JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}');
-                const code = scraperData.code;
-                const parameters = scraperConfig.parameters.map(p => p.value);
-
-                if (code) {
-                    try {
-                        const scraperFunction = new Function(`
-                            ${code}
-                            return typeof scrape !== 'undefined' ? scrape : null;
-                        `)();
-
-                        if (typeof scraperFunction === 'function') {
-                            const result = await scraperFunction(...parameters);
-                            const jobs = Array.isArray(result) ? result : [result];
-                            // Inject the scraper name into each job object
-                            return jobs.map(job => ({
-                                ...job,
-                                scraperSource: scraperConfig.scraperName
-                            }));
-                        }
-                    } catch (e) {
-                        console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
-                        return [];
-                    }
-                }
-                return [];
-            });
-
-        const allResults = await Promise.all(scraperPromises);
-        results = allResults.flat().filter(job => job);
-
-        if (results.length > 0 && searchFilters.value.prompt) {
-            await filterJobsWithAI(results, searchFilters.value.prompt);
-        }
-    }
-
     router.push({
         name: 'ViewSearch',
-        state: { results: JSON.stringify(results) }
+        state: { searchName: searchName.value }
     });
 }
 
-const filterJobsWithAI = async (jobs: any[], userPrompt: string) => {
-    const openaiApiKey = localStorage.getItem('openai_api_key') || ''
-    const endPoint = localStorage.getItem('end_point') || ''
-    const model = localStorage.getItem('model') || ''
-
-    if (!openaiApiKey || !endPoint) {
-        console.warn("API key or Endpoint missing for AI filtering");
-        return jobs;
-    }
-
-    // Parse schema once
-    let schema: Record<string, string> = {};
-    try {
-        schema = JSON.parse(searchFilters.value.responseSchema);
-    } catch (e) {
-        console.error("Failed to parse response schema:", e);
-    }
-
-    const aiPromises = jobs.map(async job => {
-        try {
-            // Replace variables in prompt
-            // Replace any ${job.key} variables found in the prompt with data from the job object
-            let localizedPrompt = userPrompt.replace(/\${job\.([^}]+)}/g, (match, key) => {
-                return job[key] !== undefined ? job[key] : match;
-            });
-
-            // Ensure the AI knows to return JSON if a schema exists
-            if (Object.keys(schema).length > 0) {
-                localizedPrompt += `\n\nImportant: Your response must be a JSON object matching this schema: ${JSON.stringify(schema)}. Do not include any other text in your response.`;
-            }
-
-            const response = await fetch(endPoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${openaiApiKey}`
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: localizedPrompt
-                        }
-                    ],
-                    // We only use json_object if the prompt mentions JSON (which we just added)
-                    // response_format: Object.keys(schema).length > 0 ? { type: "json_object" } : undefined
-                })
-            });
-
-            const data = await response.json();
-            if (response.status !== 200) {
-                console.error("AI Processing Error for job:\n" + job.positionTitle + "\nStatus:\n" + response.status + "\nError:\n" + JSON.stringify(data));
-                return job;
-            }
-            const content = data.choices[0].message.content.trim();
-
-            // Attempt to find JSON in the response
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-
-            // Type-aware mapping based on the schema
-            for (const [key, expectedType] of Object.entries(schema)) {
-                const actualValue = parsedContent[key];
-
-                // Allow some basic type conversion (e.g. AI returns "5" but we want 5)
-                if (actualValue !== undefined) {
-                    if (expectedType === 'number' && typeof actualValue === 'string') {
-                        const num = Number(actualValue);
-                        if (!isNaN(num)) job[key] = num;
-                    } else if (typeof actualValue === expectedType) {
-                        job[key] = actualValue;
-                    }
-                }
-            }
-            return job;
-
-        } catch (e) {
-            console.error("AI Processing Error for job:\n" + job.positionTitle + "\nError:\n" + JSON.stringify(e));
-            return job;
-        }
-    });
-
-    await Promise.all(aiPromises);
-}
 </script>
 
 <style scoped>

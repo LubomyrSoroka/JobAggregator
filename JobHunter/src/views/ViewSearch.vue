@@ -19,6 +19,11 @@
                     <option v-for="option in sortOptions" :value="option">{{ option }}</option>
                 </select>
             </div>
+            <div v-if="aiFiltering" class="ai-progress-banner">
+                <div class="mini-loader"></div>
+                <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
+                    jobs.length }}</span>
+            </div>
         </header>
 
         <div v-if="loading" class="loading-state">
@@ -123,10 +128,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 
 const route = useRoute()
 const jobs = ref<any[]>([])
 const loading = ref(true)
+const aiFiltering = ref(false)
 const selectedJob = ref<any>(null)
 const sortOptions = ref([
     'experience',
@@ -138,6 +145,7 @@ const sortOrder = ref(['experience', 'salary'])
 const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
+let amountFiltered: number = 0;
 
 function parseNumeric(val: any): number[] | null {
     if (typeof val === 'number') return [val];
@@ -223,16 +231,185 @@ const closeJobCard = () => {
     selectedJob.value = null
 }
 
-onMounted(() => {
+const executeSearch = async (searchName: string) => {
+    loading.value = true
+    const savedSearches: SavedSearch[] = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
+    const currentSearch = savedSearches.find(s => s.name === searchName)
+
+    if (currentSearch) {
+        const scraperPromises = currentSearch.scraperParameters
+            .filter(config => config.enabled)
+            .map(async (scraperConfig) => {
+                const scraperData = JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}');
+                const code = scraperData.code;
+                const parameters = scraperConfig.parameters.map(p => p.value);
+
+                if (code) {
+                    try {
+                        const scraperFunction = new Function(`
+                            ${code}
+                            return typeof scrape !== 'undefined' ? scrape : null;
+                        `)();
+
+                        if (typeof scraperFunction === 'function') {
+                            const result = await scraperFunction(...parameters);
+                            const scraperResults = Array.isArray(result) ? result : [result];
+                            return scraperResults.map(job => ({
+                                ...job,
+                                scraperSource: scraperConfig.scraperName
+                            }));
+                        }
+                    } catch (e) {
+                        console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
+                        return [];
+                    }
+                }
+                return [];
+            });
+
+        const allResults = await Promise.all(scraperPromises);
+        let combinedResults = allResults.flat().filter(job => job);
+
+        // Display initial results immediately
+        jobs.value = combinedResults
+        sortJobs()
+        loading.value = false
+
+        if (combinedResults.length > 0 && (currentSearch.filters?.getMissingYearsOfExperience || currentSearch.filters?.getMissingSalary)) {
+            aiFiltering.value = true
+            try {
+                await filterJobsWithAI(combinedResults, currentSearch.filters);
+                // Sort again after AI adds more data to ensure accuracy
+                sortJobs()
+            } finally {
+                aiFiltering.value = false
+            }
+        }
+    } else {
+        loading.value = false
+    }
+}
+
+const filterJobsWithAI = async (jobList: any[], filters: any) => {
+    const openaiApiKey = localStorage.getItem('openai_api_key') || ''
+    const endPoint = localStorage.getItem('end_point') || ''
+    const model = localStorage.getItem('model') || ''
+    amountFiltered = 0;
+    if (!openaiApiKey || !endPoint) {
+        console.warn("API key or Endpoint missing for AI filtering");
+        return;
+    }
+
+    const aiPromises = jobList.map(async job => {
+        ++amountFiltered;
+        try {
+            let localizedPrompt = '';
+            if (filters.getMissingYearsOfExperience && filters.getMissingSalary)
+                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary of the job.
+                Return the answer in JSON format with three keys: "yearsOfExperience", "salary" and "salaryType".
+                If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
+                If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
+                You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
+                If no specific number is mentioned, return null.
+                If the description gives a range of salary (e.g. 100000-120000), return the whole range as a string. If it gives a single number, return that number as a string.
+                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly".
+                If no specific number is mentioned, return null.
+                e.g.
+                {
+                    "yearsOfExperience": 3,
+                    "salary": "100000-120000",
+                    "salaryType": "yearly"
+                }
+                Job Description:
+                ${job.description}`;
+            else if (filters.getMissingYearsOfExperience)
+                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred.
+                Return the answer in JSON format with a single key "yearsOfExperience" and a float value.
+                If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
+                If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
+                You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
+                If no specific number is mentioned, return null.
+                e.g.
+                {
+                    "yearsOfExperience": 3
+                }
+                Job Description:
+                ${job.description}`;
+            else if (filters.getMissingSalary)
+                localizedPrompt = ` Read the following job description and determine the salary of the job.
+                Return the answer in JSON format with two keys: "salary" and "salaryType".
+                If the description gives a range of salary (e.g. 100000-120000), return the whole range as a string.
+                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
+                If no specific number is mentioned, return null.
+                e.g.
+                {
+                    "salary": "100000-120000",
+                    "salaryType": "yearly"
+                }
+                Job Description:
+                ${job.description}`;
+
+            const response = await fetch(endPoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${openaiApiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: localizedPrompt
+                        }
+                    ]
+                })
+            });
+
+            const data = await response.json();
+            if (response.status !== 200) {
+                return job;
+            }
+            const content = data.choices[0].message.content.trim();
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+
+            let keys = []
+            if (filters.getMissingYearsOfExperience)
+                keys.push("yearsOfExperience");
+            if (filters.getMissingSalary) {
+                keys.push("salary");
+                keys.push("salaryType")
+            }
+            keys.forEach(key => {
+                if (parsedContent && key in parsedContent) {
+                    job[key] = parsedContent[key];
+                }
+            });
+
+            return job;
+        } catch (e) {
+            return job;
+        }
+    });
+
+    await Promise.all(aiPromises);
+}
+
+onMounted(async () => {
     try {
-        const stateResults = window.history.state?.results
-        if (stateResults) {
-            const parsedResults = JSON.parse(stateResults)
+        const state = window.history.state
+        if (state?.searchName) {
+            await executeSearch(state.searchName)
+        } else if (state?.results) {
+            const parsedResults = JSON.parse(state.results)
             jobs.value = Array.isArray(parsedResults) ? parsedResults : []
+            loading.value = false
+        } else {
+            loading.value = false
         }
     } catch (e) {
         console.error('Failed to parse search results:', e)
-    } finally {
         loading.value = false
     }
 })
@@ -597,5 +774,41 @@ onMounted(() => {
     font-weight: 600;
     cursor: pointer;
     margin-top: 20px;
+}
+
+.ai-progress-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    padding: 12px 20px;
+    border-radius: 12px;
+    margin-top: 10px;
+    color: #0369a1;
+    font-size: 14px;
+    font-weight: 500;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.mini-loader {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #bae6fd;
+    border-top: 2px solid #0369a1;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 </style>
