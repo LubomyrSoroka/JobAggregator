@@ -4,7 +4,13 @@
             <div class="back-button" @click="$router.push('/search')">
                 <span class="icon">←</span> Back to Searches
             </div>
-            <h1 class="view-title">Search Results</h1>
+            <div class="tabs">
+                <div @click="viewSearch = true" :class="viewSearch ? 'selected' : 'not-selected'">Search Results</div>
+                <div @click="viewSearch = false" :class="!viewSearch ? 'selected' : 'not-selected'">Stats</div>
+            </div>
+        </header>
+        <div v-if="viewSearch">
+
             <div class="results-count">{{ jobs.length }} Jobs Found</div>
             <div class="sort">
                 <span class="sort-label">Sort by:</span>
@@ -24,112 +30,138 @@
                 <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
                     jobs.length }}</span>
             </div>
-        </header>
 
-        <div v-if="loading" class="loading-state">
-            <div class="loader"></div>
-            <p>Processing results...</p>
-        </div>
-
-        <div v-else-if="jobs.length === 0" class="empty-state">
-            <div class="empty-icon">📭</div>
-            <h2>No jobs found</h2>
-            <p>Try adjusting your search parameters or enabling more scrapers.</p>
-            <button class="primary-button" @click="$router.push('/search')">Go Back</button>
-        </div>
-
-        <!-- Job Details Sidebar Overlay -->
-        <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
-        <div :class="['job-full', { 'active': selectedJob }]">
-            <div v-if="selectedJob" class="job-full-content">
-                <button class="close-sidebar" @click="closeJobCard">✕</button>
-                <div class="job-full-header">
-                    <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
-                    <div class="job-full-company">{{ selectedJob.company }}</div>
-                </div>
-                <div class="job-full-meta">
-                    <div class="job-full-meta-item" v-if="selectedJob.location">
-                        <span class="meta-label">Location:</span> {{ selectedJob.location }}
-                    </div>
-                    <div class="job-full-meta-item" v-if="selectedJob.salaryRange">
-                        <span class="meta-label">Salary:</span> {{ selectedJob.salaryRange }} {{ selectedJob.salaryType
-                        }}
-                    </div>
-                    <div class="job-full-meta-item" v-if="selectedJob.datePosted">
-                        <span class="meta-label">Posted:</span> {{ selectedJob.datePosted }}
-                    </div>
-                    <div class="job-full-meta-item" v-if="selectedJob.yearsOfExperience">
-                        <span class="meta-label">Experience:</span> {{ selectedJob.yearsOfExperience }}
-                    </div>
-                </div>
-                <hr class="divider">
-                <div class="job-full-description" v-html="selectedJob.description"></div>
-                <div class="job-full-footer">
-                    <a v-if="selectedJob.applyLink || selectedJob.url" :href="selectedJob.applyLink || selectedJob.url"
-                        target="_blank" class="primary-button apply-large">
-                        Apply for this position
-                    </a>
-                    <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)" target="_blank"
-                        class="find-employees">
-                        Find Employees Who Work Here
-                    </a>
-                </div>
+            <div v-if="loading" class="loading-state">
+                <div class="loader"></div>
+                <p>Processing results...</p>
             </div>
-        </div>
 
-        <!-- Main Grid remains visible -->
-        <div v-if="!loading && jobs.length > 0" class="job-grid">
-            <div v-for="(job, index) in jobs" :key="index" class="job-card">
-                <div class="job-content" @click="openJobCard(job)">
-                    <div v-if="job.image" class="job-image">
-                        <img :src="job.image" :alt="job.company">
-                    </div>
-                    <div class="job-header" :class="{ 'with-image': job.image }">
-                        <div class="job-title-row">
-                            <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
-                            <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource }}</span>
-                        </div>
-                        <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
-                    </div>
+            <div v-else-if="jobs.length === 0" class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h2>No jobs found</h2>
+                <p>Try adjusting your search parameters or enabling more scrapers.</p>
+                <button class="primary-button" @click="$router.push('/search')">Go Back</button>
+            </div>
 
-                    <div class="job-meta">
-                        <div v-if="job.location" class="meta-item">
-                            {{ job.location }}
+            <!-- Job Details Sidebar Overlay -->
+            <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
+            <div :class="['job-full', { 'active': selectedJob }]">
+                <div v-if="selectedJob" class="job-full-content">
+                    <button class="close-sidebar" @click="closeJobCard">✕</button>
+                    <div class="job-full-header">
+                        <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
+                        <div class="job-full-company">{{ selectedJob.company }}</div>
+                    </div>
+                    <div class="job-full-meta">
+                        <div class="job-full-meta-item" v-if="selectedJob.location">
+                            <span class="meta-label">Location:</span> {{ selectedJob.location }}
                         </div>
-                        <div v-if="job.salaryRange" class="meta-item">
-                            {{ job.salaryRange }} {{ job.salaryType }}
+                        <div class="job-full-meta-item" v-if="selectedJob.salaryRange">
+                            <span class="meta-label">Salary:</span> {{ selectedJob.salaryRange }} {{
+                                selectedJob.salaryType
+                            }}
                         </div>
-                        <div v-if="job.salaryType !== 'yearly' && getYearlyEstimate(job)"
-                            class="meta-item yearly-estimate">
-                            {{ getYearlyEstimate(job) }} / year
+                        <div class="job-full-meta-item" v-if="selectedJob.datePosted">
+                            <span class="meta-label">Posted:</span> {{ selectedJob.datePosted }}
                         </div>
-                        <div v-if="job.datePosted" class="meta-item">
-                            {{ job.datePosted }}
-                        </div>
-                        <div v-if="job.yearsOfExperience" class="meta-item">
-                            {{ job.yearsOfExperience }}
+                        <div class="job-full-meta-item" v-if="selectedJob.yearsOfExperience">
+                            <span class="meta-label">Experience:</span> {{ selectedJob.yearsOfExperience }}
                         </div>
                     </div>
-
-                    <div v-if="job.description" class="job-description" v-html="job.description"></div>
-
-                    <div class="job-footer">
-                        <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                            class="apply-button">
-                            Apply Now
+                    <hr class="divider">
+                    <div class="job-full-description" v-html="selectedJob.description"></div>
+                    <div class="job-full-footer">
+                        <a v-if="selectedJob.applyLink || selectedJob.url"
+                            :href="selectedJob.applyLink || selectedJob.url" target="_blank"
+                            class="primary-button apply-large">
+                            Apply for this position
+                        </a>
+                        <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)" target="_blank"
+                            class="find-employees">
+                            Find Employees Who Work Here
                         </a>
                     </div>
                 </div>
             </div>
+
+            <!-- Main Grid remains visible -->
+            <div v-if="!loading && jobs.length > 0" class="job-grid">
+                <div v-for="(job, index) in jobs" :key="index" class="job-card">
+                    <div class="job-content" @click="openJobCard(job)">
+                        <div v-if="job.image" class="job-image">
+                            <img :src="job.image" :alt="job.company">
+                        </div>
+                        <div class="job-header" :class="{ 'with-image': job.image }">
+                            <div class="job-title-row">
+                                <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
+                                <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource }}</span>
+                            </div>
+                            <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
+                        </div>
+
+                        <div class="job-meta">
+                            <div v-if="job.location" class="meta-item">
+                                {{ job.location }}
+                            </div>
+                            <div v-if="job.salaryRange" class="meta-item">
+                                {{ job.salaryRange }} {{ job.salaryType }}
+                            </div>
+                            <div v-if="job.salaryType !== 'yearly' && getYearlyEstimate(job)"
+                                class="meta-item yearly-estimate">
+                                {{ getYearlyEstimate(job) }} / year
+                            </div>
+                            <div v-if="job.datePosted" class="meta-item">
+                                {{ job.datePosted }}
+                            </div>
+                            <div v-if="job.yearsOfExperience" class="meta-item">
+                                {{ job.yearsOfExperience }}
+                            </div>
+                        </div>
+
+                        <div v-if="job.description" class="job-description" v-html="job.description"></div>
+
+                        <div class="job-footer">
+                            <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
+                                class="apply-button">
+                                Apply Now
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+        <div v-if="!viewSearch" class="stats-view">
+            <div class="stats-card">
+                <h2 class="stats-title">Jobs by Years of Experience</h2>
+                <div v-if="jobs.length > 0" class="chart-container">
+                    <VueApexCharts width="100%" height="450" :options="chartData.options" :series="chartData.series">
+                    </VueApexCharts>
+                </div>
+                <h2 class="">Hiring Platform</h2>
+                <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
+                    :series="hiringPlatformData.series">
+                </VueApexCharts>
+                <div>
+
+                </div>
+
+                <!-- <div v-else class="empty-state">
+                    <div class="empty-icon">📊</div>
+                    <p>Load some jobs to see experience distributions!</p>
+                </div> -->
+            </div>
+        </div>
+
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
+import VueApexCharts from 'vue3-apexcharts'
 
+const viewSearch = ref(true)
 const route = useRoute()
 const jobs = ref<any[]>([])
 const loading = ref(true)
@@ -145,7 +177,173 @@ const sortOrder = ref(['experience', 'salary'])
 const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
-let amountFiltered: number = 0;
+const amountFiltered = ref(0)
+
+const chartData = computed(() => {
+    const counts: Record<number, number> = {}
+
+    jobs.value.forEach(job => {
+        const exp = job.yearsOfExperience
+        // If it's a number, take the ceiling. If it's undefined/null, skip it.
+        if (exp !== null && exp !== undefined) {
+            const val = typeof exp === 'string' ? parseFloat(exp) : exp
+            if (!isNaN(val)) {
+                const ceiling = Math.ceil(val)
+                if (ceiling >= 0) {
+                    counts[ceiling] = (counts[ceiling] || 0) + 1
+                }
+            }
+        }
+    })
+
+    const categories = Object.keys(counts).map(Number).sort((a, b) => a - b)
+    const seriesData = categories.map(cat => counts[cat])
+
+    return {
+        series: [{
+            name: 'Jobs',
+            data: seriesData
+        }],
+        options: {
+            chart: {
+                type: 'bar' as const,
+                toolbar: { show: false },
+                animations: { enabled: true, easing: 'easeinout', speed: 800 }
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 10,
+                    columnWidth: '60%',
+                    distributed: true,
+                    dataLabels: { position: 'top' }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                offsetY: -20,
+                style: { fontSize: '12px', colors: ["#304758"] }
+            },
+            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+            xaxis: {
+                categories: categories.map(cat => `${cat} yr${cat === 1 ? '' : 's'}`),
+                position: 'bottom',
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                title: {
+                    text: 'Hiring Platform',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            yaxis: {
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                labels: {
+                    show: true,
+                    formatter: (val: number) => Math.floor(val).toString()
+                },
+                title: {
+                    text: 'Number of Matching Jobs',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            grid: {
+                borderColor: '#f1f5f9',
+                strokeDashArray: 4
+            },
+            tooltip: { theme: 'light' },
+            theme: { palette: 'palette1' }
+        }
+    }
+})
+
+const hiringPlatformData = computed(() => {
+    const platforms = ['workday', 'indeed', 'jobbank.gc.ca', 'bamboohr', "other"]
+    const counts: Record<string, number> = {}
+    const platformLabels: Record<string, string> = {
+        'workday': 'Workday',
+        'indeed': 'Indeed',
+        'jobbank.gc.ca': 'Job Bank',
+        'bamboohr': 'BambooHR',
+        'other': "Other"
+    }
+
+    jobs.value.forEach(job => {
+        const link = (job.applyLink || job.url || '').toLowerCase()
+        // Extract domain part safely (handles https:// and paths)
+        const domain = link.split('//').pop()?.split('/')[0].replace(/^www\./, '') || ''
+        let found = false;
+        platforms.forEach(platform => {
+            // Checks if platform is in the domain part specifically
+            if (domain.includes(platform)) {
+                counts[platform] = (counts[platform] || 0) + 1
+                found = true;
+            }
+        })
+        if (!found)
+            counts["other"] = (counts["other"] || 0) + 1;
+
+    })
+
+    const categories = Object.keys(counts)
+    const seriesData = categories.map(cat => counts[cat])
+    const readableCategories = categories.map(cat => platformLabels[cat] || cat)
+
+    return {
+        series: [{
+            name: 'Jobs',
+            data: seriesData
+        }],
+        options: {
+            chart: {
+                type: 'bar' as const,
+                toolbar: { show: false },
+                animations: { enabled: true, easing: 'easeinout', speed: 800 }
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 10,
+                    columnWidth: '60%',
+                    distributed: true,
+                    dataLabels: { position: 'top' }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                offsetY: -20,
+                style: { fontSize: '12px', colors: ["#304758"] }
+            },
+            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+            xaxis: {
+                categories: readableCategories,
+                position: 'bottom',
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                title: {
+                    text: 'Hiring Platform',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            yaxis: {
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                labels: {
+                    show: true,
+                    formatter: (val: number) => Math.floor(val).toString()
+                },
+                title: {
+                    text: 'Number of Jobs',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            grid: {
+                borderColor: '#f1f5f9',
+                strokeDashArray: 4
+            },
+            tooltip: { theme: 'light' },
+            theme: { palette: 'palette1' }
+        }
+    }
+})
 
 function parseNumeric(val: any): number[] | null {
     if (typeof val === 'number') return [val];
@@ -294,14 +492,13 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     const openaiApiKey = localStorage.getItem('openai_api_key') || ''
     const endPoint = localStorage.getItem('end_point') || ''
     const model = localStorage.getItem('model') || ''
-    amountFiltered = 0;
+    amountFiltered.value = 0;
     if (!openaiApiKey || !endPoint) {
         console.warn("API key or Endpoint missing for AI filtering");
         return;
     }
 
     const aiPromises = jobList.map(async job => {
-        ++amountFiltered;
         try {
             let localizedPrompt = '';
             if (filters.getMissingYearsOfExperience && filters.getMissingSalary)
@@ -366,30 +563,31 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 })
             });
 
-            const data = await response.json();
-            if (response.status !== 200) {
-                return job;
-            }
-            const content = data.choices[0].message.content.trim();
-            const jsonMatch = content.match(/\{[\s\S]*\}/);
-            const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+            if (response.status === 200) {
+                const data = await response.json();
+                const content = data.choices[0].message.content.trim();
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
 
-            let keys = []
-            if (filters.getMissingYearsOfExperience)
-                keys.push("yearsOfExperience");
-            if (filters.getMissingSalary) {
-                keys.push("salary");
-                keys.push("salaryType")
-            }
-            keys.forEach(key => {
-                if (parsedContent && key in parsedContent) {
-                    job[key] = parsedContent[key];
+                let keys = []
+                if (filters.getMissingYearsOfExperience)
+                    keys.push("yearsOfExperience");
+                if (filters.getMissingSalary) {
+                    keys.push("salary");
+                    keys.push("salaryType")
                 }
-            });
-
+                keys.forEach(key => {
+                    if (parsedContent && key in parsedContent) {
+                        job[key] = parsedContent[key];
+                    }
+                });
+            }
             return job;
         } catch (e) {
+            console.error("AI Error:", e);
             return job;
+        } finally {
+            amountFiltered.value++;
         }
     });
 
@@ -416,6 +614,30 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.tabs {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+    margin-top: 10px;
+}
+
+.tabs div {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.not-selected {
+    font-size: 24px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.not-selected:hover {
+    color: #64748b;
+}
+
 /* Job Sidebar Overlay */
 .job-overlay {
     position: fixed;
@@ -529,7 +751,16 @@ onMounted(async () => {
     font-size: 16px;
     line-height: 1.8;
     color: #334155;
+    word-break: break-word;
 }
+
+.job-full-description :deep(*) {
+    position: static !important;
+    height: auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+}
+
 
 .job-full-footer {
     margin-top: 50px;
@@ -573,11 +804,23 @@ onMounted(async () => {
     color: #3b82f6;
 }
 
-.view-title {
-    font-size: 36px;
+.selected {
+    font-size: 32px;
     font-weight: 800;
     margin: 0;
     color: #1e293b;
+    position: relative;
+}
+
+.selected::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 40px;
+    height: 4px;
+    background: #3b82f6;
+    border-radius: 2px;
 }
 
 .results-count {
@@ -704,19 +947,33 @@ onMounted(async () => {
     font-size: 14px;
     color: #475569;
     line-height: 1.6;
-    margin-bottom: 24px;
-    flex: 1;
+    margin-bottom: 16px;
     /* Line Clamping */
     display: -webkit-box;
     -webkit-line-clamp: 4;
     line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    word-break: break-word;
+    pointer-events: none;
+}
+
+.job-description :deep(*) {
+    display: inline !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    width: auto !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    font-weight: inherit !important;
 }
 
 .job-footer {
     display: flex;
     justify-content: flex-end;
+    margin-top: auto;
 }
 
 .apply-button {
@@ -810,5 +1067,30 @@ onMounted(async () => {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+.stats-view {
+    padding: 20px 0;
+    animation: fadeIn 0.4s ease-out;
+}
+
+.stats-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.stats-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 30px;
+}
+
+.chart-container {
+    background: #ffffff;
+    border-radius: 12px;
 }
 </style>
