@@ -25,10 +25,20 @@
                     <option v-for="option in sortOptions" :value="option">{{ option }}</option>
                 </select>
             </div>
+            <div class="filter">
+                <label>Display Only Saved Jobs</label>
+                <input type="checkbox" v-model="savedOnly">
+            </div>
             <div v-if="aiFiltering" class="ai-progress-banner">
                 <div class="mini-loader"></div>
                 <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
                     jobs.length }}</span>
+            </div>
+
+            <div v-if="aiError" class="ai-error-banner">
+                <span class="error-icon">⚠️</span>
+                <span class="error-message">{{ aiError }}</span>
+                <button class="close-error" @click="aiError = null">✕</button>
             </div>
 
             <div v-if="loading" class="loading-state">
@@ -85,8 +95,8 @@
             </div>
 
             <!-- Main Grid remains visible -->
-            <div v-if="!loading && jobs.length > 0" class="job-grid">
-                <div v-for="(job, index) in jobs" :key="index" class="job-card">
+            <div v-if="!loading && displayedJobs.length > 0" class="job-grid">
+                <div v-for="(job, index) in displayedJobs" :key="job.url || index" class="job-card">
                     <div class="job-content" @click="openJobCard(job)">
                         <div v-if="job.image" class="job-image">
                             <img :src="job.image" :alt="job.company">
@@ -106,7 +116,7 @@
                             <div v-if="job.salaryRange" class="meta-item">
                                 {{ job.salaryRange }} {{ job.salaryType }}
                             </div>
-                            <div v-if="job.salaryType !== 'yearly' && getYearlyEstimate(job)"
+                            <div v-if="job.salaryType && job.salaryType !== 'yearly' && getYearlyEstimate(job)"
                                 class="meta-item yearly-estimate">
                                 {{ getYearlyEstimate(job) }} / year
                             </div>
@@ -121,8 +131,14 @@
                         <div v-if="job.description" class="job-description" v-html="job.description"></div>
 
                         <div class="job-footer">
+                            <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                Save
+                            </button>
+                            <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                Unsave
+                            </button>
                             <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                                class="apply-button">
+                                class="apply-button" @click.stop>
                                 Apply Now
                             </a>
                         </div>
@@ -178,6 +194,23 @@ const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
 const amountFiltered = ref(0)
+const aiError = ref<string | null>(null)
+const savedOnly = ref(false)
+
+const saveJob = (job: any) => {
+    job.saved = true
+}
+
+const unsaveJob = (job: any) => {
+    job.saved = false
+}
+
+const displayedJobs = computed(() => {
+    if (savedOnly.value) {
+        return jobs.value.filter(job => job.saved)
+    }
+    return jobs.value
+})
 
 const chartData = computed(() => {
     const counts: Record<number, number> = {}
@@ -501,7 +534,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     const aiPromises = jobList.map(async job => {
         try {
             let localizedPrompt = '';
-            if (filters.getMissingYearsOfExperience && filters.getMissingSalary)
+            if ((filters.getMissingYearsOfExperience && !job.yearsOfExperience) && (filters.getMissingSalary && !job.salaryRange))
                 localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary of the job.
                 Return the answer in JSON format with three keys: "yearsOfExperience", "salary" and "salaryType".
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
@@ -519,7 +552,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 }
                 Job Description:
                 ${job.description}`;
-            else if (filters.getMissingYearsOfExperience)
+            else if (filters.getMissingYearsOfExperience && !job.yearsOfExperience)
                 localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred.
                 Return the answer in JSON format with a single key "yearsOfExperience" and a float value.
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
@@ -532,58 +565,70 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 }
                 Job Description:
                 ${job.description}`;
-            else if (filters.getMissingSalary)
+            else if (filters.getMissingSalary && !job.salaryRange)
                 localizedPrompt = ` Read the following job description and determine the salary of the job.
                 Return the answer in JSON format with two keys: "salary" and "salaryType".
                 If the description gives a range of salary (e.g. 100000-120000), return the whole range as a string.
                 For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
-                If no specific number is mentioned, return null.
+                If no specific number is mentioned, return "salary" as "not specified" and "salaryType" as null.
                 e.g.
                 {
                     "salary": "100000-120000",
                     "salaryType": "yearly"
                 }
+                or
+                {
+                    "salary": "not specified",
+                    "salaryType": null
+                }
                 Job Description:
                 ${job.description}`;
-
-            const response = await fetch(endPoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${openaiApiKey}`
-                },
-                body: JSON.stringify({
-                    model: model,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: localizedPrompt
-                        }
-                    ]
-                })
-            });
-
-            if (response.status === 200) {
-                const data = await response.json();
-                const content = data.choices[0].message.content.trim();
-                const jsonMatch = content.match(/\{[\s\S]*\}/);
-                const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
-
-                let keys = []
-                if (filters.getMissingYearsOfExperience)
-                    keys.push("yearsOfExperience");
-                if (filters.getMissingSalary) {
-                    keys.push("salary");
-                    keys.push("salaryType")
-                }
-                keys.forEach(key => {
-                    if (parsedContent && key in parsedContent) {
-                        job[key] = parsedContent[key];
-                    }
+            if (localizedPrompt) {
+                const response = await fetch(endPoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${openaiApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            {
+                                role: 'user',
+                                content: localizedPrompt
+                            }
+                        ]
+                    })
                 });
+
+                if (response.status === 200) {
+                    const data = await response.json();
+                    const content = data.choices[0].message.content.trim();
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+
+                    let keys = []
+                    if (filters.getMissingYearsOfExperience)
+                        keys.push("yearsOfExperience");
+                    if (filters.getMissingSalary) {
+                        keys.push("salary");
+                        keys.push("salaryType")
+                    }
+                    keys.forEach(key => {
+                        if (parsedContent && key in parsedContent) {
+                            job[key] = parsedContent[key];
+                        }
+                    });
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.error?.message || response.statusText;
+                    aiError.value = `AI Error (${response.status}): ${errorMessage}`;
+                    console.error(`AI Error (${response.status}):`, errorMessage);
+                }
             }
             return job;
-        } catch (e) {
+        } catch (e: any) {
+            aiError.value = `AI connection failed: ${e.message || 'Unknown error'}`;
             console.error("AI Error:", e);
             return job;
         } finally {
@@ -620,6 +665,46 @@ onMounted(async () => {
     align-items: center;
     gap: 30px;
     margin-top: 10px;
+}
+
+.ai-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    color: #991b1b;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.error-icon {
+    font-size: 18px;
+}
+
+.error-message {
+    flex: 1;
+}
+
+.close-error {
+    background: none;
+    border: none;
+    color: #991b1b;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.close-error:hover {
+    opacity: 1;
 }
 
 .tabs div {
@@ -974,6 +1059,42 @@ onMounted(async () => {
     display: flex;
     justify-content: flex-end;
     margin-top: auto;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.save-button {
+    background-color: #3b82f6;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+}
+
+.save-button:hover {
+    background: #2563eb;
+}
+
+.unsave-button {
+    background-color: #ef4444;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+}
+
+.unsave-button:hover {
+    background: #dc2626;
 }
 
 .apply-button {

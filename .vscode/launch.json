@@ -2,11 +2,36 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "chrome",
-            "request": "launch",
-            "name": "Launch Chrome against localhost",
+            "type": "firefox",
+            "request": "attach",
+            "name": "Attach to Firefox",
             "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}"
+            "webRoot": "${workspaceFolder}/JobHunter",
+            "port": 6000,
+            "pathMappings": [
+                {
+                    "url": "http://localhost:5173",
+                    "path": "${workspaceFolder}/JobHunter"
+                }
+            ]
+        },
+        {
+            "type": "firefox",
+            "request": "launch",
+            "name": "Launch Firefox",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/JobHunter",
+            "firefoxArgs": [
+                "--start-debugger-server",
+                "6000",
+                "--no-remote"
+            ],
+            "pathMappings": [
+                {
+                    "url": "http://localhost:5173",
+                    "path": "${workspaceFolder}/JobHunter"
+                }
+            ]
         }
     ]
 }
