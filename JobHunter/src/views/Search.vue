@@ -77,13 +77,9 @@
                                     placeholder='e.g. {"years_of_experience": "number"}'></textarea>
                                 <small>Define the structure of the AI's response.</small>
                             </div> -->
-                            <div class="form-group">
-                                <label>Years of Experience</label>
-                                <input type="checkbox" v-model="searchFilters.getMissingYearsOfExperience">
-                                <label>Salary</label>
-                                <input type="checkbox" v-model="searchFilters.getMissingSalary">
-                                <small>The AI will try to find missing data in the job description.</small>
-                            </div>
+                            <AIFilters v-model:getMissingYearsOfExperience="searchFilters.getMissingYearsOfExperience"
+                                v-model:getMissingSalary="searchFilters.getMissingSalary" title="AI Enhancements"
+                                id-prefix="search" />
                         </div>
                     </div>
                 </div>
@@ -106,6 +102,7 @@
 import { ref, onMounted } from 'vue'
 import { ScraperParameter, SavedSearch, ScraperConfig } from '../models'
 import router from '@/router';
+import AIFilters from '../components/AIFilters.vue'
 
 const savedSearches = ref<SavedSearch[]>([]);
 const showSearchWindow = ref(false);

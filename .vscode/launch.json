@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+        // run this in terminal first: /Applications/Firefox.app/Contents/MacOS/firefox --start-debugger-server 6000 --no-remote
         {
             "type": "firefox",
             "request": "attach",

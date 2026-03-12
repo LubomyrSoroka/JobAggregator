@@ -10,25 +10,71 @@
             </div>
         </header>
         <div v-if="viewSearch">
+            <div class="control-panel">
+                <div class="panel-main">
+                    <div class="results-info">
+                        <span class="results-label">Search Results</span>
+                        <div class="results-badge">{{ jobs.length }} Jobs Found</div>
+                    </div>
 
-            <div class="results-count">{{ jobs.length }} Jobs Found</div>
-            <div class="sort">
-                <span class="sort-label">Sort by:</span>
-                <select v-model="sortDirection" @change="sortJobs">
-                    <option value="asc">Ascending</option>
-                    <option value="desc">Descending</option>
-                </select>
-                <select v-model="sortPriority" @change="sortJobs">
-                    <option v-for="p in priorityOptions" :value="p">{{ p }}</option>
-                </select>
-                <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs">
-                    <option v-for="option in sortOptions" :value="option">{{ option }}</option>
-                </select>
+                    <div class="panel-actions">
+                        <div class="control-group sort-group">
+                            <span class="control-label">Sort By</span>
+                            <div class="select-wrapper">
+                                <select v-model="sortDirection" @change="sortJobs" class="styled-select direction">
+                                    <option value="asc">↑ Asc</option>
+                                    <option value="desc">↓ Desc</option>
+                                </select>
+                                <select v-model="sortPriority" @change="sortJobs" class="styled-select priority">
+                                    <option v-for="p in priorityOptions" :value="p">P{{ p }}</option>
+                                </select>
+                                <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs"
+                                    class="styled-select target">
+                                    <option v-for="option in sortOptions" :value="option">{{ option }}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="control-group filter-group">
+                            <label class="toggle-switch">
+                                <input type="checkbox" v-model="savedOnly">
+                                <span class="slider"></span>
+                                <span class="toggle-label">Saved Only</span>
+                            </label>
+                        </div>
+
+                        <div class="control-group ai-trigger-group">
+                            <button @click="showAiModal = true" class="ai-trigger-button">
+                                AI Enhancer
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="filter">
-                <label>Display Only Saved Jobs</label>
-                <input type="checkbox" v-model="savedOnly">
+
+            <!-- AI Modal -->
+            <div v-if="showAiModal" class="ai-modal">
+                <div class="close" @click="showAiModal = false">✕</div>
+                <div class="search-header">
+                    <div class="header-info">
+                        <span class="header-tag">AI Enhancements</span>
+                        <h2 class="modal-title">Tune Search with AI</h2>
+                    </div>
+                </div>
+
+                <div class="ai-modal-content">
+                    <AIFilters v-model:getMissingYearsOfExperience="aiFilters.getMissingYearsOfExperience"
+                        v-model:getMissingSalary="aiFilters.getMissingSalary" id-prefix="view-modal" />
+
+                    <button class="primary-button ai-run-button large" @click="() => { runAI(); showAiModal = false; }"
+                        :disabled="aiFiltering || (!aiFilters.getMissingYearsOfExperience && !aiFilters.getMissingSalary)">
+                        <span v-if="aiFiltering" class="inline-loader"></span>
+                        {{ aiFiltering ? 'Processing...' : 'Run AI Analysis' }}
+                    </button>
+                </div>
             </div>
+
+
             <div v-if="aiFiltering" class="ai-progress-banner">
                 <div class="mini-loader"></div>
                 <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
@@ -96,7 +142,8 @@
 
             <!-- Main Grid remains visible -->
             <div v-if="!loading && displayedJobs.length > 0" class="job-grid">
-                <div v-for="(job, index) in displayedJobs" :key="job.url || index" class="job-card">
+                <div v-for="(job, index) in displayedJobs" :key="job.url || index"
+                    :class="['job-card', { 'job-ai-processed': job.aiProcessed }]">
                     <div class="job-content" @click="openJobCard(job)">
                         <div v-if="job.image" class="job-image">
                             <img :src="job.image" :alt="job.company">
@@ -110,20 +157,24 @@
                         </div>
 
                         <div class="job-meta">
-                            <div v-if="job.location" class="meta-item">
+                            <div v-if="job.location"
+                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('location') }]">
                                 {{ job.location }}
                             </div>
-                            <div v-if="job.salaryRange" class="meta-item">
+                            <div v-if="job.salaryRange"
+                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
                                 {{ job.salaryRange }} {{ job.salaryType }}
                             </div>
                             <div v-if="job.salaryType && job.salaryType !== 'yearly' && getYearlyEstimate(job)"
-                                class="meta-item yearly-estimate">
+                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
                                 {{ getYearlyEstimate(job) }} / year
                             </div>
-                            <div v-if="job.datePosted" class="meta-item">
+                            <div v-if="job.datePosted"
+                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('datePosted') }]">
                                 {{ job.datePosted }}
                             </div>
-                            <div v-if="job.yearsOfExperience" class="meta-item">
+                            <div v-if="job.yearsOfExperience"
+                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
                                 {{ job.yearsOfExperience }}
                             </div>
                         </div>
@@ -176,6 +227,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import VueApexCharts from 'vue3-apexcharts'
+import AIFilters from '../components/AIFilters.vue'
 
 const viewSearch = ref(true)
 const route = useRoute()
@@ -196,6 +248,11 @@ const sortDirection = ref('asc')
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
+const showAiModal = ref(false)
+const aiFilters = ref({
+    getMissingYearsOfExperience: false,
+    getMissingSalary: false
+})
 
 const saveJob = (job: any) => {
     job.saved = true
@@ -203,6 +260,17 @@ const saveJob = (job: any) => {
 
 const unsaveJob = (job: any) => {
     job.saved = false
+}
+
+const runAI = async () => {
+    if (jobs.value.length === 0) return
+    aiFiltering.value = true
+    try {
+        await filterJobsWithAI(jobs.value, aiFilters.value)
+        sortJobs()
+    } finally {
+        aiFiltering.value = false
+    }
 }
 
 const displayedJobs = computed(() => {
@@ -535,19 +603,25 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
         try {
             let localizedPrompt = '';
             if ((filters.getMissingYearsOfExperience && !job.yearsOfExperience) && (filters.getMissingSalary && !job.salaryRange))
-                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary of the job.
-                Return the answer in JSON format with three keys: "yearsOfExperience", "salary" and "salaryType".
+                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary range of the job.
+                Return the answer in JSON format with three keys: "yearsOfExperience", "salaryRange" and "salaryType".
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
                 If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
                 You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
                 If no specific number is mentioned, return null.
-                If the description gives a range of salary (e.g. 100000-120000), return the whole range as a string. If it gives a single number, return that number as a string.
-                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly".
-                If no specific number is mentioned, return null.
+                If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string. If it gives a single number, return that number as a string.
+                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
+                If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
                 e.g.
                 {
                     "yearsOfExperience": 3,
-                    "salary": "100000-120000",
+                    "salaryRange": "$100,000-$120,000",
+                    "salaryType": "yearly"
+                }
+                or
+                {
+                    "yearsOfExperience": null,
+                    "salaryRange": "$100,000-$120,000",
                     "salaryType": "yearly"
                 }
                 Job Description:
@@ -566,19 +640,19 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 Job Description:
                 ${job.description}`;
             else if (filters.getMissingSalary && !job.salaryRange)
-                localizedPrompt = ` Read the following job description and determine the salary of the job.
-                Return the answer in JSON format with two keys: "salary" and "salaryType".
-                If the description gives a range of salary (e.g. 100000-120000), return the whole range as a string.
+                localizedPrompt = ` Read the following job description and determine the salary range of the job.
+                Return the answer in JSON format with two keys: "salaryRange" and "salaryType".
+                If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string.
                 For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
-                If no specific number is mentioned, return "salary" as "not specified" and "salaryType" as null.
+                If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
                 e.g.
                 {
-                    "salary": "100000-120000",
+                    "salaryRange": "$100,000-$120,000",
                     "salaryType": "yearly"
                 }
                 or
                 {
-                    "salary": "not specified",
+                    "salaryRange": "not specified",
                     "salaryType": null
                 }
                 Job Description:
@@ -602,6 +676,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 });
 
                 if (response.status === 200) {
+                    job.aiProcessed = true;
                     const data = await response.json();
                     const content = data.choices[0].message.content.trim();
                     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -611,12 +686,14 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     if (filters.getMissingYearsOfExperience)
                         keys.push("yearsOfExperience");
                     if (filters.getMissingSalary) {
-                        keys.push("salary");
+                        keys.push("salaryRange");
                         keys.push("salaryType")
                     }
                     keys.forEach(key => {
                         if (parsedContent && key in parsedContent) {
                             job[key] = parsedContent[key];
+                            job["foundThroughAI"] = job["foundThroughAI"] || []
+                            job["foundThroughAI"].push(key)
                         }
                     });
                 } else {
@@ -626,6 +703,10 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     console.error(`AI Error (${response.status}):`, errorMessage);
                 }
             }
+            else {
+                job.aiProcessed = true;
+            }
+
             return job;
         } catch (e: any) {
             aiError.value = `AI connection failed: ${e.message || 'Unknown error'}`;
@@ -937,6 +1018,14 @@ onMounted(async () => {
     border-color: #3b82f6;
 }
 
+.job-ai-processed {
+    background-color: #f0f9ff;
+    /* A very light, clean sky blue */
+    border-color: #bae6fd;
+    /* A slightly darker blue border to define the edge */
+}
+
+
 .job-image {
     position: absolute;
     top: 24px;
@@ -1026,6 +1115,25 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     gap: 6px;
+    position: relative;
+}
+
+.found-through-ai {
+    background: #fef2f2 !important;
+    border: 1px solid #fee2e2 !important;
+}
+
+.found-through-ai::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 1.5px solid white;
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
 }
 
 .job-description {
@@ -1154,6 +1262,227 @@ onMounted(async () => {
     margin-top: 20px;
 }
 
+.control-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 32px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.panel-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.results-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.results-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.5px;
+}
+
+.results-badge {
+    font-size: 20px;
+    font-weight: 800;
+    color: #1e293b;
+}
+
+.panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.select-wrapper {
+    display: flex;
+    gap: 2px;
+    background: #f1f5f9;
+    padding: 2px;
+    border-radius: 10px;
+}
+
+.styled-select {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.styled-select:focus {
+    outline: none;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.styled-select.direction {
+    width: 85px;
+}
+
+.styled-select.priority {
+    width: 60px;
+}
+
+.styled-select.target {
+    width: 110px;
+}
+
+.ai-trigger-button {
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    color: #7c3aed;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    align-self: flex-end;
+}
+
+.ai-trigger-button:hover {
+    background: #ede9fe;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.1);
+}
+
+.modal-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1e293b;
+    margin: 8px 0;
+}
+
+
+.ai-modal {
+    width: 50%;
+    height: 50%;
+    margin: auto;
+}
+
+.ai-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px 0;
+}
+
+.ai-run-button.large {
+    padding: 16px;
+    font-size: 16px;
+    margin-top: 0;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background-color: #cbd5e1;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: #3b82f6;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.panel-ai {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 24px;
+}
+
+.ai-run-button {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.inline-loader {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
 .ai-progress-banner {
     display: flex;
     align-items: center;
@@ -1168,6 +1497,7 @@ onMounted(async () => {
     font-weight: 500;
     animation: fadeIn 0.3s ease-out;
 }
+
 
 .mini-loader {
     width: 16px;
