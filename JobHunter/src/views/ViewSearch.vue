@@ -142,83 +142,105 @@
 
             <!-- Main Grid remains visible -->
             <div v-if="!loading && displayedJobs.length > 0" class="job-grid">
-                <div v-for="(job, index) in displayedJobs" :key="job.url || index"
-                    :class="['job-card', { 'job-ai-processed': job.aiProcessed }]">
-                    <div class="job-content" @click="openJobCard(job)">
-                        <div v-if="job.image" class="job-image">
-                            <img :src="job.image" :alt="job.company">
-                        </div>
-                        <div class="job-header" :class="{ 'with-image': job.image }">
-                            <div class="job-title-row">
-                                <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
-                                <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource }}</span>
+                <div v-for="(jobCard, jobCardIndex) in displayedJobs" :key="jobCard[0]?.url || jobCardIndex"
+                    :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
+
+                    <div v-for="(job, index) in jobCard" :key="job.url || index">
+                        <div class="job-content" @click="openJobCard(job)"
+                            v-show="index === (jobCard.currentIndex || 0)">
+                            <div v-if="job.image" class="job-image">
+                                <img :src="job.image" :alt="job.company">
                             </div>
-                            <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
+                            <div class="job-header" :class="{ 'with-image': job.image }">
+                                <div class="job-title-row">
+                                    <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
+                                    <div class="badges-row">
+                                        <span v-if="jobCard.length > 1" class="version-badge">
+                                            {{ Number(index) + 1 }} / {{ jobCard.length }}
+                                        </span>
+                                        <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
+                                            }}</span>
+                                    </div>
+                                </div>
+                                <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
+                            </div>
+
+                            <div class="job-meta">
+                                <div v-if="job.location"
+                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('location') }]">
+                                    {{ job.location }}
+                                </div>
+                                <div v-if="job.salaryRange"
+                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
+                                    {{ job.salaryRange }} {{ job.salaryType }}
+                                </div>
+                                <div v-if="job.salaryType && job.salaryType !== 'yearly' && getYearlyEstimate(job)"
+                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
+                                    {{ getYearlyEstimate(job) }} / year
+                                </div>
+                                <div v-if="job.datePosted"
+                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('datePosted') }]">
+                                    {{ job.datePosted }}
+                                </div>
+                                <div v-if="job.yearsOfExperience"
+                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
+                                    {{ job.yearsOfExperience }}
+                                </div>
+                            </div>
+
+                            <div v-if="job.description" class="job-description" v-html="job.description"></div>
+
+                            <div class="job-footer">
+                                <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                    Save
+                                </button>
+                                <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                    Unsave
+                                </button>
+                                <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
+                                    class="apply-button" @click.stop>
+                                    Apply Now
+                                </a>
+                            </div>
+                            <div v-if="jobCard.length > 1" class="navigation-controls">
+                                <div v-if="Number(index) < jobCard.length - 1" class="arrow-right"
+                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
+                                    <ChevronRight :size="20" />
+                                </div>
+                                <div v-if="Number(index) > 0" class="arrow-left"
+                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
+                                    <ChevronLeft :size="20" />
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="job-meta">
-                            <div v-if="job.location"
-                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('location') }]">
-                                {{ job.location }}
-                            </div>
-                            <div v-if="job.salaryRange"
-                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
-                                {{ job.salaryRange }} {{ job.salaryType }}
-                            </div>
-                            <div v-if="job.salaryType && job.salaryType !== 'yearly' && getYearlyEstimate(job)"
-                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
-                                {{ getYearlyEstimate(job) }} / year
-                            </div>
-                            <div v-if="job.datePosted"
-                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('datePosted') }]">
-                                {{ job.datePosted }}
-                            </div>
-                            <div v-if="job.yearsOfExperience"
-                                :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
-                                {{ job.yearsOfExperience }}
-                            </div>
-                        </div>
-
-                        <div v-if="job.description" class="job-description" v-html="job.description"></div>
-
-                        <div class="job-footer">
-                            <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
-                                Save
-                            </button>
-                            <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
-                                Unsave
-                            </button>
-                            <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                                class="apply-button" @click.stop>
-                                Apply Now
-                            </a>
-                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div v-if="!viewSearch" class="stats-view">
-            <div class="stats-card">
-                <h2 class="stats-title">Jobs by Years of Experience</h2>
-                <div v-if="jobs.length > 0" class="chart-container">
-                    <VueApexCharts width="100%" height="450" :options="chartData.options" :series="chartData.series">
+            <div v-if="!viewSearch" class="stats-view">
+                <div class="stats-card">
+                    <h2 class="stats-title">Jobs by Years of Experience</h2>
+                    <div v-if="jobs.length > 0" class="chart-container">
+                        <VueApexCharts width="100%" height="450" :options="chartData.options"
+                            :series="chartData.series">
+                        </VueApexCharts>
+                    </div>
+                    <h2 class="">Hiring Platform</h2>
+                    <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
+                        :series="hiringPlatformData.series">
                     </VueApexCharts>
-                </div>
-                <h2 class="">Hiring Platform</h2>
-                <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
-                    :series="hiringPlatformData.series">
-                </VueApexCharts>
-                <div>
+                    <div>
 
-                </div>
+                    </div>
 
-                <!-- <div v-else class="empty-state">
+                    <!-- <div v-else class="empty-state">
                     <div class="empty-icon">📊</div>
                     <p>Load some jobs to see experience distributions!</p>
                 </div> -->
+                </div>
             </div>
-        </div>
 
+        </div>
     </div>
 </template>
 
@@ -228,6 +250,7 @@ import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import VueApexCharts from 'vue3-apexcharts'
 import AIFilters from '../components/AIFilters.vue'
+import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
 
 const viewSearch = ref(true)
 const route = useRoute()
@@ -275,7 +298,7 @@ const runAI = async () => {
 
 const displayedJobs = computed(() => {
     if (savedOnly.value) {
-        return jobs.value.filter(job => job.saved)
+        return jobs.value.filter(group => group.some((job: any) => job.saved))
     }
     return jobs.value
 })
@@ -283,7 +306,7 @@ const displayedJobs = computed(() => {
 const chartData = computed(() => {
     const counts: Record<number, number> = {}
 
-    jobs.value.forEach(job => {
+    jobs.value.flat().forEach(job => {
         const exp = job.yearsOfExperience
         // If it's a number, take the ceiling. If it's undefined/null, skip it.
         if (exp !== null && exp !== undefined) {
@@ -368,7 +391,7 @@ const hiringPlatformData = computed(() => {
         'other': "Other"
     }
 
-    jobs.value.forEach(job => {
+    jobs.value.flat().forEach(job => {
         const link = (job.applyLink || job.url || '').toLowerCase()
         // Extract domain part safely (handles https:// and paths)
         const domain = link.split('//').pop()?.split('/')[0].replace(/^www\./, '') || ''
@@ -505,12 +528,12 @@ const sortJobs = () => {
         return sortDirection.value === 'asc' ? ((valA as number) - (valB as number)) : ((valB as number) - (valA as number));
     }
 
-    jobs.value.sort((a, b) => {
+    jobs.value.sort((a: any, b: any) => {
         const primary = Array.isArray(sortOrder.value) ? sortOrder.value[0] : sortOrder.value;
-        let result = compareBy(a, b, primary);
+        let result = compareBy(a[0], b[0], primary);
 
         if (result === 0 && Array.isArray(sortOrder.value) && sortOrder.value[1]) {
-            result = compareBy(a, b, sortOrder.value[1]);
+            result = compareBy(a[0], b[0], sortOrder.value[1]);
         }
 
         return result;
@@ -570,14 +593,14 @@ const executeSearch = async (searchName: string) => {
         let combinedResults = allResults.flat().filter(job => job);
 
         // Display initial results immediately
-        jobs.value = combinedResults
+        jobs.value = getDuplicates(combinedResults)
         sortJobs()
         loading.value = false
 
-        if (combinedResults.length > 0 && (currentSearch.filters?.getMissingYearsOfExperience || currentSearch.filters?.getMissingSalary)) {
+        if (jobs.value.length > 0 && (currentSearch.filters?.getMissingYearsOfExperience || currentSearch.filters?.getMissingSalary)) {
             aiFiltering.value = true
             try {
-                await filterJobsWithAI(combinedResults, currentSearch.filters);
+                await filterJobsWithAI(jobs.value, currentSearch.filters);
                 // Sort again after AI adds more data to ensure accuracy
                 sortJobs()
             } finally {
@@ -587,6 +610,36 @@ const executeSearch = async (searchName: string) => {
     } else {
         loading.value = false
     }
+}
+const getDuplicates = (jobList: any[]) => {
+    const seen = new Set();
+    const groupedResults: any[] = [];
+    for (const job of jobList) {
+        if (!job || !job.description) {
+            const group: any = [job];
+            group.currentIndex = 0;
+            groupedResults.push(group);
+            continue;
+        }
+
+        const key = job.description.toString().trim();
+        if (seen.has(key)) {
+            const group = groupedResults.find(g => g[0]?.description?.toString().trim() === key);
+            if (group) {
+                group.push(job);
+            } else {
+                const group: any = [job];
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        } else {
+            seen.add(key);
+            const group: any = [job];
+            group.currentIndex = 0;
+            groupedResults.push(group);
+        }
+    }
+    return groupedResults;
 }
 
 const filterJobsWithAI = async (jobList: any[], filters: any) => {
@@ -599,10 +652,13 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
         return;
     }
 
-    const aiPromises = jobList.map(async job => {
+    const aiPromises = jobList.map(async group => {
+        const firstJob = group[0];
+        if (!firstJob) return group;
+
         try {
             let localizedPrompt = '';
-            if ((filters.getMissingYearsOfExperience && !job.yearsOfExperience) && (filters.getMissingSalary && !job.salaryRange))
+            if ((filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience) && (filters.getMissingSalary && !firstJob.salaryRange))
                 localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary range of the job.
                 Return the answer in JSON format with three keys: "yearsOfExperience", "salaryRange" and "salaryType".
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
@@ -625,8 +681,8 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     "salaryType": "yearly"
                 }
                 Job Description:
-                ${job.description}`;
-            else if (filters.getMissingYearsOfExperience && !job.yearsOfExperience)
+                ${firstJob.description}`;
+            else if (filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience)
                 localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred.
                 Return the answer in JSON format with a single key "yearsOfExperience" and a float value.
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
@@ -638,8 +694,8 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     "yearsOfExperience": 3
                 }
                 Job Description:
-                ${job.description}`;
-            else if (filters.getMissingSalary && !job.salaryRange)
+                ${firstJob.description}`;
+            else if (filters.getMissingSalary && !firstJob.salaryRange)
                 localizedPrompt = ` Read the following job description and determine the salary range of the job.
                 Return the answer in JSON format with two keys: "salaryRange" and "salaryType".
                 If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string.
@@ -656,7 +712,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     "salaryType": null
                 }
                 Job Description:
-                ${job.description}`;
+                ${firstJob.description}`;
             if (localizedPrompt) {
                 const response = await fetch(endPoint, {
                     method: 'POST',
@@ -676,25 +732,30 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 });
 
                 if (response.status === 200) {
-                    job.aiProcessed = true;
                     const data = await response.json();
                     const content = data.choices[0].message.content.trim();
                     const jsonMatch = content.match(/\{[\s\S]*\}/);
                     const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
 
-                    let keys = []
+                    let keys: string[] = []
                     if (filters.getMissingYearsOfExperience)
                         keys.push("yearsOfExperience");
                     if (filters.getMissingSalary) {
                         keys.push("salaryRange");
                         keys.push("salaryType")
                     }
-                    keys.forEach(key => {
-                        if (parsedContent && key in parsedContent) {
-                            job[key] = parsedContent[key];
-                            job["foundThroughAI"] = job["foundThroughAI"] || []
-                            job["foundThroughAI"].push(key)
-                        }
+
+                    group.forEach((job: any) => {
+                        job.aiProcessed = true;
+                        keys.forEach(key => {
+                            if (parsedContent && key in parsedContent) {
+                                job[key] = parsedContent[key];
+                                job["foundThroughAI"] = job["foundThroughAI"] || []
+                                if (!job["foundThroughAI"].includes(key)) {
+                                    job["foundThroughAI"].push(key)
+                                }
+                            }
+                        });
                     });
                 } else {
                     const errorData = await response.json().catch(() => ({}));
@@ -704,14 +765,14 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 }
             }
             else {
-                job.aiProcessed = true;
+                group.forEach((job: any) => job.aiProcessed = true);
             }
 
-            return job;
+            return group;
         } catch (e: any) {
             aiError.value = `AI connection failed: ${e.message || 'Unknown error'}`;
             console.error("AI Error:", e);
-            return job;
+            return group;
         } finally {
             amountFiltered.value++;
         }
@@ -727,7 +788,7 @@ onMounted(async () => {
             await executeSearch(state.searchName)
         } else if (state?.results) {
             const parsedResults = JSON.parse(state.results)
-            jobs.value = Array.isArray(parsedResults) ? parsedResults : []
+            jobs.value = Array.isArray(parsedResults) ? getDuplicates(parsedResults) : []
             loading.value = false
         } else {
             loading.value = false
@@ -740,6 +801,40 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.arrow-right {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.job-card:hover .arrow-right {
+    transform: translateY(-50%) translateX(4px);
+}
+
+.arrow-left {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    z-index: 2;
+    color: #94a3b8;
+}
+
+.job-card:hover .arrow-left {
+    transform: translateY(-50%) translateX(-4px);
+}
+
 .tabs {
     display: flex;
     flex-direction: row;
@@ -786,6 +881,38 @@ onMounted(async () => {
 
 .close-error:hover {
     opacity: 1;
+}
+
+.badges-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.version-badge {
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.arrow-right,
+.arrow-left {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    width: 32px;
+    height: 32px;
+    z-index: 10;
+}
+
+.arrow-right:hover,
+.arrow-left:hover {
+    background: white;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .tabs div {
