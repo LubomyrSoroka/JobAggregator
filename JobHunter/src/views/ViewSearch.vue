@@ -14,7 +14,13 @@
                 <div class="panel-main">
                     <div class="results-info">
                         <span class="results-label">Search Results</span>
-                        <div class="results-badge">{{ jobs.length }} Jobs Found</div>
+                        <div class="results-badge">{{ displayedJobs.length }} {{ displayedJobs.length === 1 ? 'Job' :
+                            'Jobs'
+                        }} Displayed</div>
+                        <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
+                            newJobCount === 1 ? 'Job' : 'Jobs'
+                        }} Since Last
+                            Search</div>
                     </div>
 
                     <div class="panel-actions">
@@ -39,7 +45,16 @@
                             <label class="toggle-switch">
                                 <input type="checkbox" v-model="savedOnly">
                                 <span class="slider"></span>
-                                <span class="toggle-label">Saved Only</span>
+                                <span class="toggle-label">
+                                    Saved Only
+                                </span>
+                            </label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" v-model="latestSearchOnly">
+                                <span class="slider"></span>
+                                <span class="toggle-label">
+                                    Latest Search Only
+                                </span>
                             </label>
                         </div>
 
@@ -182,7 +197,7 @@
                                     :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('datePosted') }]">
                                     {{ job.datePosted }}
                                 </div>
-                                <div v-if="job.yearsOfExperience"
+                                <div v-if="job.yearsOfExperience === 0 || job.yearsOfExperience"
                                     :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
                                     {{ job.yearsOfExperience }}
                                 </div>
@@ -217,30 +232,8 @@
                     </div>
                 </div>
             </div>
-            <div v-if="!viewSearch" class="stats-view">
-                <div class="stats-card">
-                    <h2 class="stats-title">Jobs by Years of Experience</h2>
-                    <div v-if="jobs.length > 0" class="chart-container">
-                        <VueApexCharts width="100%" height="450" :options="chartData.options"
-                            :series="chartData.series">
-                        </VueApexCharts>
-                    </div>
-                    <h2 class="">Hiring Platform</h2>
-                    <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
-                        :series="hiringPlatformData.series">
-                    </VueApexCharts>
-                    <div>
-
-                    </div>
-
-                    <!-- <div v-else class="empty-state">
-                    <div class="empty-icon">📊</div>
-                    <p>Load some jobs to see experience distributions!</p>
-                </div> -->
-                </div>
-            </div>
-
         </div>
+        <JobStats v-if="!viewSearch" :jobs="jobs" />
     </div>
 </template>
 
@@ -248,9 +241,9 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
-import VueApexCharts from 'vue3-apexcharts'
 import AIFilters from '../components/AIFilters.vue'
-import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
+import JobStats from '../components/JobStats.vue'
+import { ChevronRight, ChevronLeft, Filter } from 'lucide-vue-next'
 
 const viewSearch = ref(true)
 const route = useRoute()
@@ -271,7 +264,9 @@ const sortDirection = ref('asc')
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
+const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
+const newJobCount = ref<number | null>(null)
 const aiFilters = ref({
     getMissingYearsOfExperience: false,
     getMissingSalary: false
@@ -291,183 +286,27 @@ const runAI = async () => {
     try {
         await filterJobsWithAI(jobs.value, aiFilters.value)
         sortJobs()
+        const state = window.history.state
+        if (state && state.searchName) {
+            localStorage.setItem(`jobs_${state.searchName}`, JSON.stringify(jobs.value))
+        }
     } finally {
         aiFiltering.value = false
     }
 }
 
 const displayedJobs = computed(() => {
+    let filteredJobs = jobs.value;
     if (savedOnly.value) {
-        return jobs.value.filter(group => group.some((job: any) => job.saved))
+        filteredJobs = filteredJobs.filter(group => group.some((job: any) => job.saved))
     }
-    return jobs.value
+    if (latestSearchOnly.value) {
+        filteredJobs = filteredJobs.filter(group => group.every((job: any) => !job.notFound))
+    }
+    return filteredJobs
 })
 
-const chartData = computed(() => {
-    const counts: Record<number, number> = {}
 
-    jobs.value.flat().forEach(job => {
-        const exp = job.yearsOfExperience
-        // If it's a number, take the ceiling. If it's undefined/null, skip it.
-        if (exp !== null && exp !== undefined) {
-            const val = typeof exp === 'string' ? parseFloat(exp) : exp
-            if (!isNaN(val)) {
-                const ceiling = Math.ceil(val)
-                if (ceiling >= 0) {
-                    counts[ceiling] = (counts[ceiling] || 0) + 1
-                }
-            }
-        }
-    })
-
-    const categories = Object.keys(counts).map(Number).sort((a, b) => a - b)
-    const seriesData = categories.map(cat => counts[cat])
-
-    return {
-        series: [{
-            name: 'Jobs',
-            data: seriesData
-        }],
-        options: {
-            chart: {
-                type: 'bar' as const,
-                toolbar: { show: false },
-                animations: { enabled: true, easing: 'easeinout', speed: 800 }
-            },
-            plotOptions: {
-                bar: {
-                    borderRadius: 10,
-                    columnWidth: '60%',
-                    distributed: true,
-                    dataLabels: { position: 'top' }
-                }
-            },
-            dataLabels: {
-                enabled: true,
-                offsetY: -20,
-                style: { fontSize: '12px', colors: ["#304758"] }
-            },
-            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-            xaxis: {
-                categories: categories.map(cat => `${cat} yr${cat === 1 ? '' : 's'}`),
-                position: 'bottom',
-                axisBorder: { show: false },
-                axisTicks: { show: false },
-                title: {
-                    text: 'Hiring Platform',
-                    style: { color: '#64748b', fontWeight: 600 }
-                }
-            },
-            yaxis: {
-                axisBorder: { show: false },
-                axisTicks: { show: false },
-                labels: {
-                    show: true,
-                    formatter: (val: number) => Math.floor(val).toString()
-                },
-                title: {
-                    text: 'Number of Matching Jobs',
-                    style: { color: '#64748b', fontWeight: 600 }
-                }
-            },
-            grid: {
-                borderColor: '#f1f5f9',
-                strokeDashArray: 4
-            },
-            tooltip: { theme: 'light' },
-            theme: { palette: 'palette1' }
-        }
-    }
-})
-
-const hiringPlatformData = computed(() => {
-    const platforms = ['workday', 'indeed', 'jobbank.gc.ca', 'bamboohr', "other"]
-    const counts: Record<string, number> = {}
-    const platformLabels: Record<string, string> = {
-        'workday': 'Workday',
-        'indeed': 'Indeed',
-        'jobbank.gc.ca': 'Job Bank',
-        'bamboohr': 'BambooHR',
-        'other': "Other"
-    }
-
-    jobs.value.flat().forEach(job => {
-        const link = (job.applyLink || job.url || '').toLowerCase()
-        // Extract domain part safely (handles https:// and paths)
-        const domain = link.split('//').pop()?.split('/')[0].replace(/^www\./, '') || ''
-        let found = false;
-        platforms.forEach(platform => {
-            // Checks if platform is in the domain part specifically
-            if (domain.includes(platform)) {
-                counts[platform] = (counts[platform] || 0) + 1
-                found = true;
-            }
-        })
-        if (!found)
-            counts["other"] = (counts["other"] || 0) + 1;
-
-    })
-
-    const categories = Object.keys(counts)
-    const seriesData = categories.map(cat => counts[cat])
-    const readableCategories = categories.map(cat => platformLabels[cat] || cat)
-
-    return {
-        series: [{
-            name: 'Jobs',
-            data: seriesData
-        }],
-        options: {
-            chart: {
-                type: 'bar' as const,
-                toolbar: { show: false },
-                animations: { enabled: true, easing: 'easeinout', speed: 800 }
-            },
-            plotOptions: {
-                bar: {
-                    borderRadius: 10,
-                    columnWidth: '60%',
-                    distributed: true,
-                    dataLabels: { position: 'top' }
-                }
-            },
-            dataLabels: {
-                enabled: true,
-                offsetY: -20,
-                style: { fontSize: '12px', colors: ["#304758"] }
-            },
-            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
-            xaxis: {
-                categories: readableCategories,
-                position: 'bottom',
-                axisBorder: { show: false },
-                axisTicks: { show: false },
-                title: {
-                    text: 'Hiring Platform',
-                    style: { color: '#64748b', fontWeight: 600 }
-                }
-            },
-            yaxis: {
-                axisBorder: { show: false },
-                axisTicks: { show: false },
-                labels: {
-                    show: true,
-                    formatter: (val: number) => Math.floor(val).toString()
-                },
-                title: {
-                    text: 'Number of Jobs',
-                    style: { color: '#64748b', fontWeight: 600 }
-                }
-            },
-            grid: {
-                borderColor: '#f1f5f9',
-                strokeDashArray: 4
-            },
-            tooltip: { theme: 'light' },
-            theme: { palette: 'palette1' }
-        }
-    }
-})
 
 function parseNumeric(val: any): number[] | null {
     if (typeof val === 'number') return [val];
@@ -553,12 +392,16 @@ const closeJobCard = () => {
     selectedJob.value = null
 }
 
-const executeSearch = async (searchName: string) => {
+const executeSearch = async (searchName: string, viewSearch: boolean) => {
     loading.value = true
     const savedSearches: SavedSearch[] = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
     const currentSearch = savedSearches.find(s => s.name === searchName)
-
-    if (currentSearch) {
+    const oldJobs = localStorage.getItem(`jobs_${searchName}`) || '[]';
+    if (viewSearch) {
+        jobs.value = JSON.parse(oldJobs);
+        loading.value = false;
+    }
+    else if (currentSearch) {
         const scraperPromises = currentSearch.scraperParameters
             .filter(config => config.enabled)
             .map(async (scraperConfig) => {
@@ -593,7 +436,11 @@ const executeSearch = async (searchName: string) => {
         let combinedResults = allResults.flat().filter(job => job);
 
         // Display initial results immediately
+        // this will merge cards that have the same descriptions (but possibly different location) into one
         jobs.value = getDuplicates(combinedResults)
+        newJobCount.value = findNewJobs(jobs.value, JSON.parse(localStorage.getItem(`jobs_${searchName}_original`) || '[]'), JSON.parse(oldJobs))
+        localStorage.setItem(`jobs_${searchName}_original`, JSON.stringify(jobs.value))
+
         sortJobs()
         loading.value = false
 
@@ -607,10 +454,52 @@ const executeSearch = async (searchName: string) => {
                 aiFiltering.value = false
             }
         }
+        localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value))
     } else {
         loading.value = false
     }
 }
+
+const findNewJobs = (currentJobs: any[][], oldJobsOriginal: any[][], oldJobsAnalyzed: any[][]) => {
+    // Create a lookup map: stringified_original_packet -> analyzed_packet
+    const analyzedMap = new Map<string, any[]>();
+
+    oldJobsOriginal.forEach((group, index) => {
+        // Warning: JSON.stringify is sensitive to property order. If your scraper somehow changes the order of keys in the job object (e.g., { title: '...', url: '...' } vs { url: '...', title: '...' }), the stringified keys won't match.
+        const key = JSON.stringify(group);
+        if (oldJobsAnalyzed[index]) {
+            analyzedMap.set(key, oldJobsAnalyzed[index]);
+        }
+    });
+
+    let newJobCount = 0;
+
+    const previousJobMatches = new Set<string>();
+    // We update the currentJobs array to use analyzed versions where they exist
+    currentJobs.forEach((group, index) => {
+        const key = JSON.stringify(group);
+        const savedAnalyzedVersion = analyzedMap.get(key);
+        if (savedAnalyzedVersion) {
+            // Restore the previously analyzed data (with AI fields, etc.)
+            currentJobs[index] = savedAnalyzedVersion;
+            previousJobMatches.add(JSON.stringify(savedAnalyzedVersion));
+        } else {
+            newJobCount++;
+        }
+    });
+
+    // add back jobs from the previous search that are not in the current search
+    oldJobsAnalyzed.forEach((group: any) => {
+        const key = JSON.stringify(group);
+        if (!previousJobMatches.has(key)) {
+            group.forEach((job: any) => job.notFound = true);
+            currentJobs.push(group);
+        }
+    })
+
+    return newJobCount;
+}
+
 const getDuplicates = (jobList: any[]) => {
     const seen = new Set();
     const groupedResults: any[] = [];
@@ -655,7 +544,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     const aiPromises = jobList.map(async group => {
         const firstJob = group[0];
         if (!firstJob) return group;
-
+        if (firstJob.aiProcessed) return group;
         try {
             let localizedPrompt = '';
             if ((filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience) && (filters.getMissingSalary && !firstJob.salaryRange))
@@ -664,7 +553,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
                 If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
                 You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
-                If no specific number is mentioned, return null.
+                If no specific number is mentioned, return "not specified".
                 If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string. If it gives a single number, return that number as a string.
                 For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
                 If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
@@ -676,7 +565,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 }
                 or
                 {
-                    "yearsOfExperience": null,
+                    "yearsOfExperience": "not specified",
                     "salaryRange": "$100,000-$120,000",
                     "salaryType": "yearly"
                 }
@@ -688,7 +577,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
                 If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
                 You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
-                If no specific number is mentioned, return null.
+                If no specific number is mentioned, return "not specified".
                 e.g.
                 {
                     "yearsOfExperience": 3
@@ -785,11 +674,7 @@ onMounted(async () => {
     try {
         const state = window.history.state
         if (state?.searchName) {
-            await executeSearch(state.searchName)
-        } else if (state?.results) {
-            const parsedResults = JSON.parse(state.results)
-            jobs.value = Array.isArray(parsedResults) ? getDuplicates(parsedResults) : []
-            loading.value = false
+            await executeSearch(state.searchName, state?.viewSearch)
         } else {
             loading.value = false
         }
@@ -1429,6 +1314,12 @@ onMounted(async () => {
     color: #1e293b;
 }
 
+.new-jobs-badge {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
 .panel-actions {
     display: flex;
     align-items: center;
@@ -1519,6 +1410,17 @@ onMounted(async () => {
 
 
 .ai-modal {
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 20px;
+    background-color: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e2e8f0;
     width: 50%;
     height: 50%;
     margin: auto;

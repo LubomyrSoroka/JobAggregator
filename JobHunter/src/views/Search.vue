@@ -91,7 +91,9 @@
                 <button class="save-button" @click="saveSearch">Save Search</button>
                 <button v-if="originalName !== ''" class="save-button" @click="deleteSearch">Delete
                     Search</button>
-                <button v-if="originalName !== ''" class="save-button" @click="runSearch">Run</button>
+                <button v-if="originalName !== ''" class="save-button" @click="runSearch(false)">Run</button>
+                <button v-if="originalName !== ''" class="save-button" @click="runSearch(true)">View Last
+                    Search</button>
             </div>
         </div>
     </div>
@@ -237,11 +239,11 @@ const deleteSearch = () => {
         closeSearchWindow();
     }
 }
-const runSearch = () => {
+const runSearch = (viewSearch: boolean = false) => {
     saveSearch();
     router.push({
         name: 'ViewSearch',
-        state: { searchName: searchName.value }
+        state: { searchName: searchName.value, viewSearch }
     });
 }
 
