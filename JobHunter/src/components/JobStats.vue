@@ -21,14 +21,23 @@ import { computed } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
 
 const props = defineProps<{
-    jobs: any[][]
+    jobs: any[]
 }>()
 
 const chartData = computed(() => {
     const counts: Record<number, number> = {}
 
-    props.jobs.forEach(group => {
-        const job = group[0];
+    // Use a Map to deduplicate by description for statistics
+    const seenDescriptions = new Set<string>()
+    props.jobs.forEach(job => {
+        if (!job || !job.description) {
+            // If no description, treat as unique for stats
+        } else {
+            const desc = job.description.toString().trim()
+            if (seenDescriptions.has(desc)) return
+            seenDescriptions.add(desc)
+        }
+
         const exp = job.yearsOfExperience
         // If it's a number, take the ceiling. If it's undefined/null, skip it.
         if (exp !== null && exp !== undefined) {
@@ -113,8 +122,14 @@ const hiringPlatformData = computed(() => {
         'other': "Other"
     }
 
-    props.jobs.forEach(group => {
-        const job = group[0];
+    const seenDescriptions = new Set<string>()
+    props.jobs.forEach(job => {
+        if (job.description) {
+            const desc = job.description.toString().trim()
+            if (seenDescriptions.has(desc)) return
+            seenDescriptions.add(desc)
+        }
+
         const link = (job.applyLink || job.url || '').toLowerCase()
         // Extract domain part safely (handles https:// and paths)
         const domain = link.split('//').pop()?.split('/')[0].replace(/^www\./, '') || ''

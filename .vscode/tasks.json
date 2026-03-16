@@ -1,0 +1,12 @@
+// tasks.json
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "runTerminalCommand",
+            "type": "shell",
+            "command": "/Applications/Firefox.app/Contents/MacOS/firefox --start-debugger-server 6000 --no-remote",
+            "problemMatcher": []
+        }
+    ]
+}

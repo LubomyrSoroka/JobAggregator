@@ -14,9 +14,11 @@
                 <div class="panel-main">
                     <div class="results-info">
                         <span class="results-label">Search Results</span>
-                        <div class="results-badge">{{ displayedJobs.length }} {{ displayedJobs.length === 1 ? 'Job' :
+                        <div class="results-badge">{{ displayedJobs.length }} {{ 'Job ' + (displayedJobs.length === 1 ?
+                            'Card' : 'Cards') }} Displayed</div>
+                        <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                        }} Displayed</div>
+                        }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
                         }} Since Last
@@ -93,7 +95,7 @@
             <div v-if="aiFiltering" class="ai-progress-banner">
                 <div class="mini-loader"></div>
                 <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
-                    jobs.length }}</span>
+                    displayedJobs.length }}</span>
             </div>
 
             <div v-if="aiError" class="ai-error-banner">
@@ -174,7 +176,7 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                            }}</span>
+                                        }}</span>
                                     </div>
                                 </div>
                                 <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
@@ -201,6 +203,9 @@
                                     :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
                                     {{ job.yearsOfExperience }}
                                 </div>
+                                <div v-if="job.reposted" class="meta-item">
+                                    {{ job.reposted }}x reposted
+                                </div>
                             </div>
 
                             <div v-if="job.description" class="job-description" v-html="job.description"></div>
@@ -218,11 +223,11 @@
                                 </a>
                             </div>
                             <div v-if="jobCard.length > 1" class="navigation-controls">
-                                <div v-if="Number(index) < jobCard.length - 1" class="arrow-right"
+                                <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
                                     @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
                                     <ChevronRight :size="20" />
                                 </div>
-                                <div v-if="Number(index) > 0" class="arrow-left"
+                                <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
                                     @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
                                     <ChevronLeft :size="20" />
                                 </div>
@@ -238,7 +243,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
@@ -298,12 +303,12 @@ const runAI = async () => {
 const displayedJobs = computed(() => {
     let filteredJobs = jobs.value;
     if (savedOnly.value) {
-        filteredJobs = filteredJobs.filter(group => group.some((job: any) => job.saved))
+        filteredJobs = filteredJobs.filter(job => job.saved)
     }
     if (latestSearchOnly.value) {
-        filteredJobs = filteredJobs.filter(group => group.every((job: any) => !job.notFound))
+        filteredJobs = filteredJobs.filter(job => job.fromLatestSearch)
     }
-    return filteredJobs
+    return getDuplicates(filteredJobs)
 })
 
 
@@ -369,10 +374,10 @@ const sortJobs = () => {
 
     jobs.value.sort((a: any, b: any) => {
         const primary = Array.isArray(sortOrder.value) ? sortOrder.value[0] : sortOrder.value;
-        let result = compareBy(a[0], b[0], primary);
+        let result = compareBy(a, b, primary);
 
         if (result === 0 && Array.isArray(sortOrder.value) && sortOrder.value[1]) {
-            result = compareBy(a[0], b[0], sortOrder.value[1]);
+            result = compareBy(a, b, sortOrder.value[1]);
         }
 
         return result;
@@ -436,9 +441,9 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         let combinedResults = allResults.flat().filter(job => job);
 
         // Display initial results immediately
-        // this will merge cards that have the same descriptions (but possibly different location) into one
-        jobs.value = getDuplicates(combinedResults)
-        newJobCount.value = findNewJobs(jobs.value, JSON.parse(localStorage.getItem(`jobs_${searchName}_original`) || '[]'), JSON.parse(oldJobs))
+        // jobs.value is now a flat list. Grouping for the UI happens in displayedJobs computed property.
+        jobs.value = combinedResults
+        newJobCount.value = getExistingData(jobs.value, JSON.parse(oldJobs))
         localStorage.setItem(`jobs_${searchName}_original`, JSON.stringify(jobs.value))
 
         sortJobs()
@@ -460,52 +465,91 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
     }
 }
 
-const findNewJobs = (currentJobs: any[][], oldJobsOriginal: any[][], oldJobsAnalyzed: any[][]) => {
-    // Create a lookup map: stringified_original_packet -> analyzed_packet
-    const analyzedMap = new Map<string, any[]>();
+// This function restores analyzed data (AI results, etc.) from previous searches for matching jobs.
+const getExistingData = (currentJobs: any[], oldJobsAnalyzed: any[]) => {
+    let newJobCount = 0;
+    const oldJobsMap = new Map<string, any>();
 
-    oldJobsOriginal.forEach((group, index) => {
-        // Warning: JSON.stringify is sensitive to property order. If your scraper somehow changes the order of keys in the job object (e.g., { title: '...', url: '...' } vs { url: '...', title: '...' }), the stringified keys won't match.
-        const key = JSON.stringify(group);
-        if (oldJobsAnalyzed[index]) {
-            analyzedMap.set(key, oldJobsAnalyzed[index]);
+    oldJobsAnalyzed.forEach((job) => {
+        let key = JSON.stringify(job);
+        if (job.id && job.scraperSource) {
+            key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
+        } else {
+            key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
         }
+        oldJobsMap.set(key, job);
     });
 
-    let newJobCount = 0;
+    const usedKeys = new Set<string>();
 
-    const previousJobMatches = new Set<string>();
-    // We update the currentJobs array to use analyzed versions where they exist
-    currentJobs.forEach((group, index) => {
-        const key = JSON.stringify(group);
-        const savedAnalyzedVersion = analyzedMap.get(key);
-        if (savedAnalyzedVersion) {
-            // Restore the previously analyzed data (with AI fields, etc.)
-            currentJobs[index] = savedAnalyzedVersion;
-            previousJobMatches.add(JSON.stringify(savedAnalyzedVersion));
+    // Update currentJobs in place and track used keys
+    for (let i = 0; i < currentJobs.length; i++) {
+        const job = currentJobs[i];
+        let key = null;
+        if (job.id && job.scraperSource) {
+            key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
         } else {
+            key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+        }
+
+        const oldJob = oldJobsMap.get(key);
+        if (oldJob) {
+            if (oldJob.datePosted !== job.datePosted) {
+                oldJob.reposted = (oldJob.reposted || 0) + 1;
+                currentJobs.splice(i, 1);
+                i--;
+                //oldJob.fromLatestSearch = true;
+            } else {
+                currentJobs[i] = { ...oldJob, fromLatestSearch: true };
+                usedKeys.add(key);
+            }
+        } else {
+            currentJobs[i].fromLatestSearch = true;
             newJobCount++;
         }
-    });
+    }
 
-    // add back jobs from the previous search that are not in the current search
-    oldJobsAnalyzed.forEach((group: any) => {
-        const key = JSON.stringify(group);
-        if (!previousJobMatches.has(key)) {
-            group.forEach((job: any) => job.notFound = true);
-            currentJobs.push(group);
+    // Iterate through keys directly to add jobs not found in the latest search
+    oldJobsMap.forEach((job, key) => {
+        if (!usedKeys.has(key)) {
+            currentJobs.push({ ...job, fromLatestSearch: false });
         }
-    })
+    });
 
     return newJobCount;
 }
+
+// find current jobs with different id and different date posted but same title and company
+// I feel like this might go wrong if the same job is posted from multiple scrapers
+// const getReposts = (currentJobs: any[], oldJobsAnalyzed: any[]) => {
+//     const oldJobsMap = new Map<string, any>();
+//     oldJobsAnalyzed.forEach((job) => {
+//         oldJobsMap.set(JSON.stringify({ title: job.title, company: job.company, description: job.description }), job);
+//     })
+//     currentJobs.forEach((job) => {
+//         const oldJob = oldJobsMap.get(JSON.stringify({ title: job.title, company: job.company, description: job.description }));
+//         if (oldJob) {
+//             if (oldJob.scraperSource && job.scraperSource && oldJob.scraperSource === job.scraperSource) {
+//                 if (oldJob.id !== job.id && oldJob.datePosted !== job.datePosted) {
+//                     job.reposted = job.reposted ? job.reposted + 1 : 1;
+//                     job.datePosted = oldJob.datePosted;
+//                 }
+//             }
+//             else if (oldJob.datePosted !== job.datePosted) {
+//                 job.reposted = job.reposted ? job.reposted + 1 : 1;
+//                 job.datePosted = oldJob.datePosted;
+//             }
+//         }
+//     })
+// }
+
 
 const getDuplicates = (jobList: any[]) => {
     const seen = new Set();
     const groupedResults: any[] = [];
     for (const job of jobList) {
         if (!job || !job.description) {
-            const group: any = [job];
+            const group: any = reactive([job]);
             group.currentIndex = 0;
             groupedResults.push(group);
             continue;
@@ -517,13 +561,13 @@ const getDuplicates = (jobList: any[]) => {
             if (group) {
                 group.push(job);
             } else {
-                const group: any = [job];
+                const group: any = reactive([job]);
                 group.currentIndex = 0;
                 groupedResults.push(group);
             }
         } else {
             seen.add(key);
-            const group: any = [job];
+            const group: any = reactive([job]);
             group.currentIndex = 0;
             groupedResults.push(group);
         }
@@ -541,10 +585,14 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
         return;
     }
 
-    const aiPromises = jobList.map(async group => {
+    // Group jobs by description to avoid redundant AI calls for duplicate postings
+    const grouped = getDuplicates(jobList);
+
+    const aiPromises = grouped.map(async group => {
         const firstJob = group[0];
         if (!firstJob) return group;
         if (firstJob.aiProcessed) return group;
+        if (firstJob.fromLatestSearch === false) return group;
         try {
             let localizedPrompt = '';
             if ((filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience) && (filters.getMissingSalary && !firstJob.salaryRange))
@@ -554,6 +602,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
                 You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
                 If no specific number is mentioned, return "not specified".
+                Return a short summary of the years of exeprience requirement in the "yearsOfExperienceSummary" key.
                 If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string. If it gives a single number, return that number as a string.
                 For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
                 If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
@@ -713,7 +762,6 @@ onMounted(async () => {
     justify-content: center;
     transition: transform 0.2s ease;
     z-index: 2;
-    color: #94a3b8;
 }
 
 .job-card:hover .arrow-left {
