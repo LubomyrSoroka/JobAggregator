@@ -18,11 +18,14 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                        }} in total</div>
+                            }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                        }} Since Last
+                            }} Since Last
                             Search</div>
+                        <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
+                            repostCount === 1 ? 'Job' : 'Jobs'
+                            }} </div>
                     </div>
 
                     <div class="panel-actions">
@@ -56,6 +59,13 @@
                                 <span class="slider"></span>
                                 <span class="toggle-label">
                                     Latest Search Only
+                                </span>
+                            </label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" v-model="noReposts">
+                                <span class="slider"></span>
+                                <span class="toggle-label">
+                                    No Reposts
                                 </span>
                             </label>
                         </div>
@@ -126,19 +136,9 @@
                         <div class="job-full-company">{{ selectedJob.company }}</div>
                     </div>
                     <div class="job-full-meta">
-                        <div class="job-full-meta-item" v-if="selectedJob.location">
-                            <span class="meta-label">Location:</span> {{ selectedJob.location }}
-                        </div>
-                        <div class="job-full-meta-item" v-if="selectedJob.salaryRange">
-                            <span class="meta-label">Salary:</span> {{ selectedJob.salaryRange }} {{
-                                selectedJob.salaryType
-                            }}
-                        </div>
-                        <div class="job-full-meta-item" v-if="selectedJob.datePosted">
-                            <span class="meta-label">Posted:</span> {{ selectedJob.datePosted }}
-                        </div>
-                        <div class="job-full-meta-item" v-if="selectedJob.yearsOfExperience">
-                            <span class="meta-label">Experience:</span> {{ selectedJob.yearsOfExperience }}
+                        <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
+                            :class="['job-full-meta-item', { 'found-through-ai': meta.isAi }]">
+                            <span class="meta-label">{{ meta.label }}:</span> {{ meta.value }}
                         </div>
                     </div>
                     <hr class="divider">
@@ -176,39 +176,23 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                        }}</span>
+                                            }}</span>
                                     </div>
                                 </div>
                                 <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
                             </div>
 
                             <div class="job-meta">
-                                <div v-if="job.location"
-                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('location') }]">
-                                    {{ job.location }}
-                                </div>
-                                <div v-if="job.salaryRange"
-                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
-                                    {{ job.salaryRange }} {{ job.salaryType }}
-                                </div>
-                                <div v-if="job.salaryType && job.salaryType !== 'yearly' && getYearlyEstimate(job)"
-                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('salaryRange') }]">
-                                    {{ getYearlyEstimate(job) }} / year
-                                </div>
-                                <div v-if="job.datePosted"
-                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('datePosted') }]">
-                                    {{ job.datePosted }}
-                                </div>
-                                <div v-if="job.yearsOfExperience === 0 || job.yearsOfExperience"
-                                    :class="['meta-item', { 'found-through-ai': job.foundThroughAI?.includes('yearsOfExperience') }]">
-                                    {{ job.yearsOfExperience }}
-                                </div>
-                                <div v-if="job.reposted" class="meta-item">
-                                    {{ job.reposted }}x reposted
+                                <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
+                                    :class="['meta-item', { 'found-through-ai': meta.isAi }]">
+                                    {{ meta.value }}
                                 </div>
                             </div>
 
-                            <div v-if="job.description" class="job-description" v-html="job.description"></div>
+                            <div v-if="job.requirementsSummary" class="job-description">
+                                {{ job.requirementsSummary }}
+                            </div>
+                            <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
 
                             <div class="job-footer">
                                 <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
@@ -250,6 +234,7 @@ import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
 import { ChevronRight, ChevronLeft, Filter } from 'lucide-vue-next'
 
+const repostCount = ref(0);
 const viewSearch = ref(true)
 const route = useRoute()
 const jobs = ref<any[]>([])
@@ -269,6 +254,7 @@ const sortDirection = ref('asc')
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
+const noReposts = ref(true)
 const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
@@ -307,6 +293,9 @@ const displayedJobs = computed(() => {
     }
     if (latestSearchOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.fromLatestSearch)
+    }
+    if (noReposts.value) {
+        filteredJobs = filteredJobs.filter(job => job.reposted == null)
     }
     return getDuplicates(filteredJobs)
 })
@@ -397,6 +386,62 @@ const closeJobCard = () => {
     selectedJob.value = null
 }
 
+const getJobMeta = (job: any) => {
+    const meta = [];
+
+    if (job.location) {
+        meta.push({
+            label: 'Location',
+            value: job.location,
+            isAi: job.foundThroughAI?.includes('location')
+        });
+    }
+
+    if (job.salaryRange) {
+        meta.push({
+            label: 'Salary',
+            value: `${job.salaryRange} ${job.salaryType || ''}`.trim(),
+            isAi: job.foundThroughAI?.includes('salaryRange')
+        });
+    }
+
+    const yearly = getYearlyEstimate(job);
+    if (job.salaryType && job.salaryType !== 'yearly' && yearly) {
+        meta.push({
+            label: 'Estimate',
+            value: `${yearly} / year`,
+            isAi: job.foundThroughAI?.includes('salaryRange')
+        });
+    }
+
+    if (job.datePosted) {
+        meta.push({
+            label: 'Posted',
+            value: Array.isArray(job.datePosted) ? job.datePosted[0] : job.datePosted,
+            isAi: job.foundThroughAI?.includes('datePosted')
+        });
+    }
+
+    if (job.yearsOfExperience === 'not specified' || job.yearsOfExperience === 0) {
+        const val = typeof job.yearsOfExperience === 'number' ? `${job.yearsOfExperience}y exp` : job.yearsOfExperience;
+        meta.push({
+            label: 'Experience',
+            value: val,
+            isAi: job.foundThroughAI?.includes('yearsOfExperience')
+        });
+    }
+
+    if (job.reposted) {
+        meta.push({
+            label: 'Reposts',
+            value: `${job.reposted}x reposted`,
+            isAi: false
+        });
+    }
+
+    return meta;
+}
+
 const executeSearch = async (searchName: string, viewSearch: boolean) => {
     loading.value = true
     const savedSearches: SavedSearch[] = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
@@ -443,7 +488,7 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         // Display initial results immediately
         // jobs.value is now a flat list. Grouping for the UI happens in displayedJobs computed property.
         jobs.value = combinedResults
-        newJobCount.value = getExistingData(jobs.value, JSON.parse(oldJobs))
+        getExistingData(jobs.value, JSON.parse(oldJobs))
         localStorage.setItem(`jobs_${searchName}_original`, JSON.stringify(jobs.value))
 
         sortJobs()
@@ -467,7 +512,8 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
 
 // This function restores analyzed data (AI results, etc.) from previous searches for matching jobs.
 const getExistingData = (currentJobs: any[], oldJobsAnalyzed: any[]) => {
-    let newJobCount = 0;
+    newJobCount.value = 0;
+    repostCount.value = 0;
     const oldJobsMap = new Map<string, any>();
 
     oldJobsAnalyzed.forEach((job) => {
@@ -494,20 +540,32 @@ const getExistingData = (currentJobs: any[], oldJobsAnalyzed: any[]) => {
 
         const oldJob = oldJobsMap.get(key);
         if (oldJob) {
-            if (oldJob.datePosted !== job.datePosted) {
+            if ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted)) {
                 oldJob.reposted = (oldJob.reposted || 0) + 1;
+                repostCount.value++;
+                oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
                 currentJobs.splice(i, 1);
                 i--;
-                //oldJob.fromLatestSearch = true;
+                oldJob.fromLatestSearch = true;
             } else {
                 currentJobs[i] = { ...oldJob, fromLatestSearch: true };
+                // if the job from the latest search is the same as an old job which already has reposts, then this job is a repost (so add 1 to repostCount)
+                if (currentJobs[i].reposted > 0)
+                    repostCount.value++;
+
                 usedKeys.add(key);
             }
         } else {
             currentJobs[i].fromLatestSearch = true;
-            newJobCount++;
+            newJobCount.value++;
         }
     }
+
+    // currentJobs.forEach((job) => {
+    //     if (job.fromLatestSearch) {
+    //         repostCount.value += job.reposted || 0;
+    //     }
+    // })
 
     // Iterate through keys directly to add jobs not found in the latest search
     oldJobsMap.forEach((job, key) => {
@@ -516,7 +574,6 @@ const getExistingData = (currentJobs: any[], oldJobsAnalyzed: any[]) => {
         }
     });
 
-    return newJobCount;
 }
 
 // find current jobs with different id and different date posted but same title and company
@@ -602,21 +659,23 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
                 You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
                 If no specific number is mentioned, return "not specified".
-                Return a short summary of the years of exeprience requirement in the "yearsOfExperienceSummary" key.
+                Return a short summary of the requirements of the role in the "requirementsSummary" key. Include data about the years of experience expected for the most important technologies or frameworks of the job.
                 If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string. If it gives a single number, return that number as a string.
                 For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
                 If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
                 e.g.
                 {
-                    "yearsOfExperience": 3,
+                    "yearsOfExperience": 2,
                     "salaryRange": "$100,000-$120,000",
-                    "salaryType": "yearly"
+                    "salaryType": "yearly",
+                    "requirementsSummary": "The job requires 2-3 years in Python and 1 year in QA. Knowledge of React Native is considered and asset. etc."
                 }
                 or
                 {
                     "yearsOfExperience": "not specified",
-                    "salaryRange": "$100,000-$120,000",
-                    "salaryType": "yearly"
+                    "salaryRange": "not specified",
+                    "salaryType": "null",
+                    "requirementsSummary": "This role requires experience in Java and Spring Boot. etc."
                 }
                 Job Description:
                 ${firstJob.description}`;
@@ -629,7 +688,8 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                 If no specific number is mentioned, return "not specified".
                 e.g.
                 {
-                    "yearsOfExperience": 3
+                    "yearsOfExperience": 2,
+                    "requirementsSummary": "The job requires 2-3 years in Python and 1 year in QA. Knowledge of React Native is considered and asset. etc."
                 }
                 Job Description:
                 ${firstJob.description}`;
@@ -676,8 +736,10 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
 
                     let keys: string[] = []
-                    if (filters.getMissingYearsOfExperience)
+                    if (filters.getMissingYearsOfExperience) {
                         keys.push("yearsOfExperience");
+                        keys.push("requirementsSummary");
+                    }
                     if (filters.getMissingSalary) {
                         keys.push("salaryRange");
                         keys.push("salaryType")
@@ -957,6 +1019,7 @@ onMounted(async () => {
     padding: 12px 16px;
     border-radius: 10px;
     border: 1px solid #f1f5f9;
+    position: relative;
 }
 
 .meta-label {
@@ -1209,6 +1272,7 @@ onMounted(async () => {
     overflow: hidden;
     word-break: break-word;
     pointer-events: none;
+    white-space: pre-line;
 }
 
 .job-description :deep(*) {

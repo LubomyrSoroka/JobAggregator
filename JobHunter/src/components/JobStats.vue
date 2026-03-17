@@ -112,14 +112,17 @@ const chartData = computed(() => {
 })
 
 const hiringPlatformData = computed(() => {
-    const platforms = ['workday', 'indeed', 'jobbank.gc.ca', 'bamboohr', "other"]
     const counts: Record<string, number> = {}
     const platformLabels: Record<string, string> = {
         'workday': 'Workday',
         'indeed': 'Indeed',
         'jobbank.gc.ca': 'Job Bank',
         'bamboohr': 'BambooHR',
-        'other': "Other"
+        'other': "Other",
+        'taleo': "Taleo",
+        'greenhouse': "Greenhouse",
+        'ashby': "Ashby",
+        'smartrecruiters': "SmartRecruiters",
     }
 
     const seenDescriptions = new Set<string>()
@@ -134,7 +137,7 @@ const hiringPlatformData = computed(() => {
         // Extract domain part safely (handles https:// and paths)
         const domain = link.split('//').pop()?.split('/')[0].replace(/^www\./, '') || ''
         let found = false;
-        platforms.forEach(platform => {
+        Object.keys(platformLabels).forEach(platform => {
             // Checks if platform is in the domain part specifically
             if (domain.includes(platform)) {
                 counts[platform] = (counts[platform] || 0) + 1
