@@ -157,9 +157,13 @@
                             Apply for this position
                         </a>
                         <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)" target="_blank"
-                            class="find-employees">
-                            Find Employees Who Work Here
+                            class="primary-button">
+                            Find Employees
                         </a>
+                        <a v-if="selectedJobLink" class="primary-button" :href="selectedJobLink" target="_blank">
+                            View Job on Original Site
+                        </a>
+
                     </div>
                 </div>
             </div>
@@ -244,11 +248,15 @@ import Filter, { filters as defaultFilters } from '@/components/Filter'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
+const scraperCache = new Map<string, any>()
+
 const route = useRoute()
 const jobs = ref<any[]>([])
 const loading = ref(true)
 const aiFiltering = ref(false)
 const selectedJob = ref<any>(null)
+const selectedJobLink = computed(() => getJobLink(selectedJob.value))
+
 const sortOptions = ref([
     'experience',
     'salary',
@@ -474,7 +482,10 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         const scraperPromises = currentSearch.scraperParameters
             .filter(config => config.enabled)
             .map(async (scraperConfig) => {
-                const scraperData = JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}');
+                if (!scraperCache.has(scraperConfig.scraperName)) {
+                    scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
+                }
+                const scraperData = scraperCache.get(scraperConfig.scraperName);
                 const code = scraperData.code;
                 const parameters = scraperConfig.parameters.map(p => p.value);
 
@@ -748,6 +759,18 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     });
 
     await Promise.all(aiPromises);
+}
+const getJobLink = (job: any) => {
+    if (!job || !job.scraperSource || !job.id) return ''
+    if (!scraperCache.has(job.scraperSource)) {
+        scraperCache.set(job.scraperSource, JSON.parse(localStorage.getItem(job.scraperSource) || '{}'))
+    }
+    const scraperData = scraperCache.get(job.scraperSource)
+    let url = scraperData?.jobLinkTemplate?.replace('{id}', job.id) || ''
+    if (url && !url.startsWith('http') && !url.startsWith('//')) {
+        url = 'https://' + url
+    }
+    return url
 }
 
 onMounted(async () => {
@@ -1042,6 +1065,9 @@ onMounted(async () => {
 
 
 .job-full-footer {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
     margin-top: 50px;
     padding-top: 30px;
     border-top: 1px solid #e2e8f0;

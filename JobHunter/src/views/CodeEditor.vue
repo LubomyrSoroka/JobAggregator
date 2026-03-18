@@ -14,6 +14,8 @@
         </div>
         <div>Credits</div>
         <input v-model="credits" placeholder="Enter your credits...">
+        <div>Job URL</div>
+        <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
         <div class="buttons">
             <button @click="saveScraper">Save</button>
             <button @click="openRunMenu">Run</button>
@@ -45,6 +47,7 @@ const scraperName = ref('');
 const error = ref('');
 const credits = ref('');
 const outputCount = ref(0);
+const jobLinkTemplate = ref('');
 const output = ref('');
 const runMenu = ref(false);
 const parameters = ref<ScraperParameter[]>([]);
@@ -56,6 +59,7 @@ onMounted(() => {
         code.value = data.code || ''
         credits.value = data.credits || ''
         parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_parameters`) || '[]')
+        jobLinkTemplate.value = data.jobLinkTemplate || ''
     }
 })
 
@@ -64,7 +68,7 @@ const saveScraper = () => {
         error.value = 'Please enter a scraper name'
         return
     }
-    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, credits: credits.value }))
+    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, credits: credits.value, jobLinkTemplate: jobLinkTemplate.value }))
     let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
     if (!myScrapers.includes(scraperName.value)) {
         myScrapers.push(scraperName.value)
