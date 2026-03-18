@@ -77,9 +77,7 @@
                                     placeholder='e.g. {"years_of_experience": "number"}'></textarea>
                                 <small>Define the structure of the AI's response.</small>
                             </div> -->
-                            <AIFilters v-model:getMissingYearsOfExperience="searchFilters.getMissingYearsOfExperience"
-                                v-model:getMissingSalary="searchFilters.getMissingSalary" title="AI Enhancements"
-                                id-prefix="search" />
+                            <AIFilters :filters="searchFilters" title="AI Enhancements" id-prefix="search" />
                         </div>
                     </div>
                 </div>
@@ -105,6 +103,7 @@ import { ref, onMounted } from 'vue'
 import { ScraperParameter, SavedSearch, ScraperConfig } from '../models'
 import router from '@/router';
 import AIFilters from '../components/AIFilters.vue'
+import Filter, { filters as defaultFilters } from '../components/Filter.ts'
 
 const savedSearches = ref<SavedSearch[]>([]);
 const showSearchWindow = ref(false);
@@ -116,12 +115,7 @@ const currentScraper = ref('');
 const tempConfigs = ref<ScraperConfig[]>([]);
 const originalName = ref('');
 const activeTab = ref('scrapers');
-const searchFilters = ref({
-    // prompt: '',
-    // responseSchema: '',
-    getMissingYearsOfExperience: false,
-    getMissingSalary: false
-});
+const searchFilters = ref<Filter[]>(defaultFilters);
 
 onMounted(() => {
     scraperNames.value = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
@@ -143,19 +137,9 @@ const openSearchMenu = (currentSearchName?: string) => {
     // Initialize filters from saved search if it exists
     const search = savedSearches.value.find(s => s.name === currentSearchName);
     if (search && search.filters) {
-        searchFilters.value = {
-            // prompt: search.filters.prompt || '',
-            // responseSchema: search.filters.responseSchema || '',
-            getMissingYearsOfExperience: search.filters.getMissingYearsOfExperience || false,
-            getMissingSalary: search.filters.getMissingSalary || false
-        };
+        searchFilters.value = search.filters;
     } else {
-        searchFilters.value = {
-            // prompt: '',
-            // responseSchema: '',
-            getMissingYearsOfExperience: false,
-            getMissingSalary: false
-        };
+        searchFilters.value = defaultFilters;
     }
 
     const firstScraper = scraperNames.value[0];

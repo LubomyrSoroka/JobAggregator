@@ -1,3 +1,5 @@
+import Filter from "./components/Filter";
+
 export class ScraperParameter {
     name: string;
     value: string;
@@ -23,9 +25,9 @@ export class ScraperConfig {
 export class SavedSearch {
     name: string;
     scraperParameters: ScraperConfig[];
-    filters: Record<string, any>;
+    filters: Filter[];
 
-    constructor(name: string = '', scraperParameters: ScraperConfig[] = [], filters: Record<string, any> = {}) {
+    constructor(name: string = '', scraperParameters: ScraperConfig[] = [], filters: Filter[] = []) {
         this.name = name;
         this.scraperParameters = scraperParameters;
         this.filters = filters;

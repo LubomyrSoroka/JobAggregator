@@ -90,11 +90,10 @@
                 </div>
 
                 <div class="ai-modal-content">
-                    <AIFilters v-model:getMissingYearsOfExperience="aiFilters.getMissingYearsOfExperience"
-                        v-model:getMissingSalary="aiFilters.getMissingSalary" id-prefix="view-modal" />
+                    <AIFilters :filters="aiFilters" id-prefix="view-modal" />
 
                     <button class="primary-button ai-run-button large" @click="() => { runAI(); showAiModal = false; }"
-                        :disabled="aiFiltering || (!aiFilters.getMissingYearsOfExperience && !aiFilters.getMissingSalary)">
+                        :disabled="aiFiltering || aiFilters.every((filter: Filter) => !filter.value)">
                         <span v-if="aiFiltering" class="inline-loader"></span>
                         {{ aiFiltering ? 'Processing...' : 'Run AI Analysis' }}
                     </button>
@@ -139,6 +138,14 @@
                         <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
                             :class="['job-full-meta-item', { 'found-through-ai': meta.isAi }]">
                             <span class="meta-label">{{ meta.label }}:</span> {{ meta.value }}
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <label class="keywords-label">Keywords:</label>
+                        <div class="keywords-container">
+                            <div v-for="(keyword, index) in selectedJob.keywords" :key="index" class="keyword-item">
+                                {{ keyword }}
+                            </div>
                         </div>
                     </div>
                     <hr class="divider">
@@ -232,7 +239,8 @@ import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
-import { ChevronRight, ChevronLeft, Filter } from 'lucide-vue-next'
+import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
+import Filter, { filters as defaultFilters } from '@/components/Filter'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
@@ -258,10 +266,7 @@ const noReposts = ref(true)
 const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
-const aiFilters = ref({
-    getMissingYearsOfExperience: false,
-    getMissingSalary: false
-})
+const aiFilters = ref<Filter[]>(defaultFilters)
 
 const saveJob = (job: any) => {
     job.saved = true
@@ -422,7 +427,7 @@ const getJobMeta = (job: any) => {
         });
     }
 
-    if (job.yearsOfExperience === 'not specified' || job.yearsOfExperience === 0) {
+    if (job.yearsOfExperience === 'not specified' || job.yearsOfExperience === 0 || job.yearsOfExperience) {
         const val = typeof job.yearsOfExperience === 'number' ? `${job.yearsOfExperience}y exp` : job.yearsOfExperience;
         meta.push({
             label: 'Experience',
@@ -436,6 +441,20 @@ const getJobMeta = (job: any) => {
             label: 'Reposts',
             value: `${job.reposted}x reposted`,
             isAi: false
+        });
+    }
+    if (job.requiresSchoolEnrollment != null) {
+        meta.push({
+            label: 'Requires School Enrollment',
+            value: job.requiresSchoolEnrollment,
+            isAi: job.foundThroughAI?.includes('requiresSchoolEnrollment')
+        });
+    }
+    if (job.prefersLocalCandidates != null) {
+        meta.push({
+            label: 'Prefers Local Candidates',
+            value: job.prefersLocalCandidates,
+            isAi: job.foundThroughAI?.includes('prefersLocalCandidates')
         });
     }
 
@@ -494,7 +513,7 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         sortJobs()
         loading.value = false
 
-        if (jobs.value.length > 0 && (currentSearch.filters?.getMissingYearsOfExperience || currentSearch.filters?.getMissingSalary)) {
+        if (jobs.value.length > 0 && (currentSearch.filters.some(f => f.value))) {
             aiFiltering.value = true
             try {
                 await filterJobsWithAI(jobs.value, currentSearch.filters);
@@ -651,67 +670,20 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
         if (firstJob.aiProcessed) return group;
         if (firstJob.fromLatestSearch === false) return group;
         try {
-            let localizedPrompt = '';
-            if ((filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience) && (filters.getMissingSalary && !firstJob.salaryRange))
-                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred and the salary range of the job.
-                Return the answer in JSON format with three keys: "yearsOfExperience", "salaryRange" and "salaryType".
-                If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
-                If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
-                You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
-                If no specific number is mentioned, return "not specified".
-                Return a short summary of the requirements of the role in the "requirementsSummary" key. Include data about the years of experience expected for the most important technologies or frameworks of the job.
-                If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string. If it gives a single number, return that number as a string.
-                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
-                If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
-                e.g.
-                {
-                    "yearsOfExperience": 2,
-                    "salaryRange": "$100,000-$120,000",
-                    "salaryType": "yearly",
-                    "requirementsSummary": "The job requires 2-3 years in Python and 1 year in QA. Knowledge of React Native is considered and asset. etc."
+            let localizedPrompt = 'From the job title and description, determine the following and answer in JSON format:';
+            let number = 1;
+            const exampleJson: any = {}
+            filters.forEach((filter: Filter) => {
+                if (filter.value && filter.outputs.some((output: string) => !firstJob[output])) {
+                    localizedPrompt += number++ + `. ${filter.prompt}`;
+                    Object.keys(filter.exampleJson).forEach(key => {
+                        exampleJson[key] = filter.exampleJson[key];
+                    })
                 }
-                or
-                {
-                    "yearsOfExperience": "not specified",
-                    "salaryRange": "not specified",
-                    "salaryType": "null",
-                    "requirementsSummary": "This role requires experience in Java and Spring Boot. etc."
-                }
-                Job Description:
-                ${firstJob.description}`;
-            else if (filters.getMissingYearsOfExperience && !firstJob.yearsOfExperience)
-                localizedPrompt = ` Read the following job description and determine how many years of experience are required or preferred.
-                Return the answer in JSON format with a single key "yearsOfExperience" and a float value.
-                If the description gives a range of years of experience (e.g. 3-5 years), return the lower bound of the range (3 in this case).
-                If there are multiple different requirements for years of experience, return the highest value. (E.g. 2-3 years in Python and 1 year in QA then return 2)
-                You may output decimal values for years of experience. For example, if a job asks for 6 months of experience, then return 0.5.
-                If no specific number is mentioned, return "not specified".
-                e.g.
-                {
-                    "yearsOfExperience": 2,
-                    "requirementsSummary": "The job requires 2-3 years in Python and 1 year in QA. Knowledge of React Native is considered and asset. etc."
-                }
-                Job Description:
-                ${firstJob.description}`;
-            else if (filters.getMissingSalary && !firstJob.salaryRange)
-                localizedPrompt = ` Read the following job description and determine the salary range of the job.
-                Return the answer in JSON format with two keys: "salaryRange" and "salaryType".
-                If the description gives a range of salary (e.g. $100,000-$120,000), return the whole range as a string.
-                For the salary type, if the salary type is weekly, return "weekly" if the salary type is hourly, return "hourly" if the salary type is yearly, return "yearly" and if it is none of the above, return null.
-                If no specific number is mentioned, return "salaryRange" as "not specified" and "salaryType" as null.
-                e.g.
-                {
-                    "salaryRange": "$100,000-$120,000",
-                    "salaryType": "yearly"
-                }
-                or
-                {
-                    "salaryRange": "not specified",
-                    "salaryType": null
-                }
-                Job Description:
-                ${firstJob.description}`;
-            if (localizedPrompt) {
+            })
+            localizedPrompt += '\n\nExample JSON output:\n\n' + JSON.stringify(exampleJson) + "\n\n" + firstJob.description;
+
+            if (number !== 1) {
                 const response = await fetch(endPoint, {
                     method: 'POST',
                     headers: {
@@ -736,14 +708,11 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
                     const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
 
                     let keys: string[] = []
-                    if (filters.getMissingYearsOfExperience) {
-                        keys.push("yearsOfExperience");
-                        keys.push("requirementsSummary");
-                    }
-                    if (filters.getMissingSalary) {
-                        keys.push("salaryRange");
-                        keys.push("salaryType")
-                    }
+                    filters.forEach((filter: Filter) => {
+                        if (filter.value && filter.outputs.some((output: string) => !firstJob[output])) {
+                            keys.push(...filter.outputs);
+                        }
+                    })
 
                     group.forEach((job: any) => {
                         job.aiProcessed = true;
@@ -1028,6 +997,27 @@ onMounted(async () => {
     margin-right: 4px;
     font-size: 13px;
     text-transform: uppercase;
+}
+
+.keywords-label {
+    font-weight: 700;
+    color: #64748b;
+    margin-right: 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.keywords-container {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.keyword-item {
+    padding: 8px 16px;
+    background: #f8fafc;
+    border-radius: 4px;
+    margin-right: 4px;
+    margin-bottom: 4px;
 }
 
 .divider {

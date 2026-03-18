@@ -4,14 +4,11 @@
             <span class="filter-title">{{ title }}</span>
         </div>
         <div class="filter-options">
-            <div class="filter-option" @click="getMissingYearsOfExperience = !getMissingYearsOfExperience">
-                <input type="checkbox" :id="idPrefix + '-exp'" v-model="getMissingYearsOfExperience" @click.stop>
-                <label :for="idPrefix + '-exp'"
-                    @click.stop="getMissingYearsOfExperience = !getMissingYearsOfExperience">Years of Experience</label>
-            </div>
-            <div class="filter-option" @click="getMissingSalary = !getMissingSalary">
-                <input type="checkbox" :id="idPrefix + '-salary'" v-model="getMissingSalary" @click.stop>
-                <label :for="idPrefix + '-salary'" @click.stop="getMissingSalary = !getMissingSalary">Salary</label>
+            <div v-for="(filter, index) in filters" :key="index" class="filter-option"
+                @click="filter.value = !filter.value">
+                <input type="checkbox" :id="idPrefix + '-' + filter.name" v-model="filter.value" @click.stop>
+                <label :for="idPrefix + '-' + filter.name" @click.stop="filter.value = !filter.value">{{ filter.name
+                    }}</label>
             </div>
         </div>
         <p class="filter-hint">The AI will try to find missing data in the job description.</p>
@@ -19,14 +16,19 @@
     </div>
 </template>
 
-<script setup lang="ts">
-const getMissingYearsOfExperience = defineModel<boolean>('getMissingYearsOfExperience')
-const getMissingSalary = defineModel<boolean>('getMissingSalary')
 
-defineProps<{
+<script setup lang="ts">
+import Filter, { filters as defaultFilters } from './Filter.ts';
+
+const props = withDefaults(defineProps<{
+    filters?: Filter[];
     title?: string;
     idPrefix?: string;
-}>();
+}>(), {
+    filters: () => defaultFilters,
+    title: '',
+    idPrefix: 'ai-filter'
+});
 </script>
 
 <style scoped>
