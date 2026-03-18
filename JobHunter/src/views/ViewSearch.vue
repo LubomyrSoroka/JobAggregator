@@ -18,14 +18,14 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                            }} in total</div>
+                        }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
+                        }} Since Last
                             Search</div>
                         <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                             repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
+                        }} </div>
                     </div>
 
                     <div class="panel-actions">
@@ -132,7 +132,9 @@
                     <button class="close-sidebar" @click="closeJobCard">✕</button>
                     <div class="job-full-header">
                         <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
-                        <div class="job-full-company">{{ selectedJob.company }}</div>
+                        <a v-if="selectedJob.website" :href="selectedJob.website" target="_blank"
+                            class="job-full-company">{{ selectedJob.company }}</a>
+                        <div v-else class="job-full-company">{{ selectedJob.company }}</div>
                     </div>
                     <div class="job-full-meta">
                         <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
@@ -187,10 +189,12 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                            }}</span>
+                                        }}</span>
                                     </div>
                                 </div>
-                                <div class="job-company">{{ job.company || 'Unknown Company' }}</div>
+                                <a v-if="job.website" :href="job.website" target="_blank" class="job-full-company">{{
+                                    job.company }}</a>
+                                <div v-else class="job-full-company">{{ job.company }}</div>
                             </div>
 
                             <div class="job-meta">
@@ -995,6 +999,7 @@ onMounted(async () => {
     font-size: 20px;
     color: #3b82f6;
     font-weight: 600;
+    text-decoration: none;
 }
 
 .job-full-meta {
