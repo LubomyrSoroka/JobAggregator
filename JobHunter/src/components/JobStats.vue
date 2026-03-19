@@ -123,6 +123,7 @@ const hiringPlatformData = computed(() => {
         'greenhouse': "Greenhouse",
         'ashby': "Ashby",
         'smartrecruiters': "SmartRecruiters",
+        'workable': "Workable",
     }
 
     const seenDescriptions = new Set<string>()

@@ -18,14 +18,18 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                        }} in total</div>
+                            }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                        }} Since Last
+                            }} Since Last
                             Search</div>
                         <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                             repostCount === 1 ? 'Job' : 'Jobs'
-                        }} </div>
+                            }} </div>
+                        <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
+                            Jobs Found {{
+                                irrelevantCount === 1 ? 'Job' : 'Jobs'
+                            }} </div>
                     </div>
 
                     <div class="panel-actions">
@@ -66,6 +70,13 @@
                                 <span class="slider"></span>
                                 <span class="toggle-label">
                                     No Reposts
+                                </span>
+                            </label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" v-model="relevantOnly">
+                                <span class="slider"></span>
+                                <span class="toggle-label">
+                                    Relevant Only
                                 </span>
                             </label>
                         </div>
@@ -189,7 +200,7 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                        }}</span>
+                                            }}</span>
                                     </div>
                                 </div>
                                 <a v-if="job.website" :href="job.website" target="_blank" class="job-full-company">{{
@@ -275,10 +286,15 @@ const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
 const noReposts = ref(true)
+const relevantOnly = ref(true);
 const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
 const aiFilters = ref<Filter[]>(defaultFilters)
+
+const irrelevantCount = computed(() => {
+    return jobs.value.filter(job => !(job.isRelevantJob ?? true)).length
+})
 
 const saveJob = (job: any) => {
     job.saved = true
@@ -314,6 +330,9 @@ const displayedJobs = computed(() => {
     if (noReposts.value) {
         filteredJobs = filteredJobs.filter(job => job.reposted == null)
     }
+    if (relevantOnly.value) {
+        filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
+    }
     return getDuplicates(filteredJobs)
 })
 
@@ -326,7 +345,6 @@ function parseNumeric(val: any): number[] | null {
     if (cleaned.includes('-')) {
         const parts = cleaned.split('-').map(p => parseFloat(p)).filter(p => !isNaN(p));
         if (parts.length === 0) return null;
-        //return parts.reduce((a, b) => a + b, 0) / parts.length;
         return parts;
     }
     const parsed = parseFloat(cleaned);
@@ -345,11 +363,27 @@ function calculateYearlySalary(job: any): number[] | null {
     return baseVal; // Assume yearly if unspecified or already yearly
 }
 
+const formatMoney = (val: number) => {
+    return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// assume job type is yearly
+const cleanSalary = (job: any) => {
+    if (job.salaryRange === 'not specified') return 'not specified';
+    const parts = parseNumeric(job.salaryRange);
+    if (parts === null || parts[0] === undefined) return '';
+    const type = (job.salaryType || '').toLowerCase();
+    const useDecimals = type === 'hourly';
+
+    const format = (val: number) => {
+        return useDecimals ? formatMoney(val) : Math.round(val).toLocaleString();
+    }
+    return `$${format(parts[0])} ${parts[1] ? '- $' + format(parts[1]) : ''}`;
+}
+
 const getYearlyEstimate = (job: any) => {
     const yearly = calculateYearlySalary(job);
     if (yearly === null || yearly[0] === undefined) return '';
-    const type = (job.salaryType || '').toLowerCase();
-    if (['yearly', 'annual', 'year'].includes(type)) return `≈ $${Math.round(yearly[0]).toLocaleString()} ${yearly[1] ? '- $' + Math.round(yearly[1]).toLocaleString() : ''}`;
     return `≈ $${Math.round(yearly[0]).toLocaleString()} ${yearly[1] ? '- $' + Math.round(yearly[1]).toLocaleString() : ''}`;
 }
 
@@ -417,7 +451,7 @@ const getJobMeta = (job: any) => {
     if (job.salaryRange) {
         meta.push({
             label: 'Salary',
-            value: `${job.salaryRange} ${job.salaryType || ''}`.trim(),
+            value: `${cleanSalary(job)} ${job.salaryType || ''}`.trim(),
             isAi: job.foundThroughAI?.includes('salaryRange')
         });
     }
@@ -426,7 +460,7 @@ const getJobMeta = (job: any) => {
     if (job.salaryType && job.salaryType !== 'yearly' && yearly) {
         meta.push({
             label: 'Estimate',
-            value: `${yearly} / year`,
+            value: `${yearly} yearly`,
             isAi: job.foundThroughAI?.includes('salaryRange')
         });
     }
@@ -523,7 +557,6 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         // jobs.value is now a flat list. Grouping for the UI happens in displayedJobs computed property.
         jobs.value = combinedResults
         getExistingData(jobs.value, JSON.parse(oldJobs))
-        localStorage.setItem(`jobs_${searchName}_original`, JSON.stringify(jobs.value))
 
         sortJobs()
         loading.value = false

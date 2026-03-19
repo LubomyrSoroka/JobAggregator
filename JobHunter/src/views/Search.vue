@@ -138,7 +138,9 @@ const openSearchMenu = (currentSearchName?: string) => {
     const search = savedSearches.value.find(s => s.name === currentSearchName);
     if (search && search.filters) {
         searchFilters.value = search.filters;
-    } else {
+    }
+    // is there any point to this else statement?
+    else {
         searchFilters.value = defaultFilters;
     }
 
@@ -214,6 +216,7 @@ const saveSearch = () => {
     localStorage.setItem('my_saved_searches', JSON.stringify(savedSearches.value))
     closeSearchWindow();
 }
+
 const deleteSearch = () => {
     if (!originalName.value) return;
     let search = savedSearches.value.find(s => s.name === originalName.value);

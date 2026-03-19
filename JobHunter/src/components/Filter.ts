@@ -70,6 +70,16 @@ const filters: Filter[] = [
             "prefersLocalCandidates": false
         }
     },
+    {
+        name: "isRelevantJob",
+        value: false,
+        outputs: ["isRelevantJob"],
+        prompt: `The relevance of the job to the user. If the description mentions that the job is a CNC programmer, a development programmer (who plans events) or a coding instructor, return false. Otherwise, return true.`,
+        exampleJson: {
+            "isRelevantJob": false
+        }
+
+    }
 ]
 export default Filter;
 export { filters };
