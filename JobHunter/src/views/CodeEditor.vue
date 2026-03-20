@@ -77,7 +77,7 @@ const saveScraper = () => {
 }
 const openRunMenu = () => {
     runMenu.value = true;
-    const match = code.value.match(/(?:async\s+)?function\s+scrape\s*\(([^)]*)\)/) ||
+    const match = code.value.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
         code.value.match(/const\s+scrape\s*=\s*(?:async\s*)?\(([^)]*)\)/);
 
     if (match) {

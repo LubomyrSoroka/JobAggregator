@@ -8,6 +8,7 @@
 - By the way I wrote the api, it should be impossibly to get 'week' or 'month' only 'weekly' or 'monthly'. Here:
 "if (type === 'week' || type === 'weekly') return baseVal.map(value => value * 52);
     if (type === 'month' || type === 'monthly') return baseVal.map(value => value * 12);"
+- Check if sortJobs is working while using the AI Enhancer.
 
 
 # DONE
