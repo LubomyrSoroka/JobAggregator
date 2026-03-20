@@ -12,6 +12,16 @@
                     :series="hiringPlatformData.series">
                 </VueApexCharts>
             </div>
+            <h2 class="">Keywords</h2>
+            <div v-if="jobs.length > 0" class="chart-container">
+                <VueApexCharts width="100%" height="450" :options="keywordData.options" :series="keywordData.series">
+                </VueApexCharts>
+            </div>
+            <h2 class="">Salary Range</h2>
+            <div v-if="jobs.length > 0" class="chart-container">
+                <VueApexCharts width="100%" height="450" :options="salaryData.options" :series="salaryData.series">
+                </VueApexCharts>
+            </div>
         </div>
     </div>
 </template>
@@ -19,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import VueApexCharts from 'vue3-apexcharts'
+import { calculateYearlySalary, parseNumeric } from '@/components/salary'
 
 const props = defineProps<{
     jobs: any[]
@@ -210,6 +221,150 @@ const hiringPlatformData = computed(() => {
         }
     }
 })
+const keywordData = computed(() => {
+    const counts: Record<string, number> = {}
+    props.jobs.forEach(job => {
+        if (job.keywords) {
+            job.keywords.forEach((keyword: string) => {
+                counts[keyword] = (counts[keyword] || 0) + 1
+            })
+        }
+    })
+    const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    const top10 = sortedCounts.slice(0, 10)
+    return {
+        series: [{
+            name: 'Jobs',
+            data: top10.map(item => item[1])
+        }],
+        options: {
+            chart: {
+                type: 'bar' as const,
+                toolbar: { show: false },
+                animations: { enabled: true, easing: 'easeinout', speed: 800 }
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 10,
+                    columnWidth: '60%',
+                    distributed: true,
+                    dataLabels: { position: 'top' }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                offsetY: -20,
+                style: { fontSize: '12px', colors: ["#304758"] }
+            },
+            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+            xaxis: {
+                categories: top10.map(item => item[0]),
+                position: 'bottom',
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                title: {
+                    text: 'Keywords',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            yaxis: {
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                labels: {
+                    show: true,
+                    formatter: (val: number) => Math.floor(val).toString()
+                },
+                title: {
+                    text: 'Number of Jobs',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            grid: {
+                borderColor: '#f1f5f9',
+                strokeDashArray: 4
+            },
+            tooltip: { theme: 'light' },
+            theme: { palette: 'palette1' }
+        }
+    }
+})
+
+const salaryData = computed(() => {
+    const counts: Record<string, number> = {}
+    const binSize = 10000;
+    props.jobs.forEach(job => {
+        let salaryValue = null;
+        if (job.salaryRange === 'not specified')
+            counts['not specified'] = (counts['not specified'] || 0) + 1
+        else if (job.salaryType !== "yearly" && job.salaryRange) {
+            salaryValue = calculateYearlySalary(job);
+        } else if (job.salaryRange) {
+            salaryValue = parseNumeric(job.salaryRange);
+        }
+
+        if (salaryValue != null && salaryValue[0] != null) {
+            const bin = Math.floor(salaryValue[0] / binSize) * binSize;
+            counts[bin] = (counts[bin] || 0) + 1
+        }
+    })
+
+    return {
+        series: [{
+            name: 'Jobs',
+            data: Object.values(counts)
+        }],
+        options: {
+            chart: {
+                type: 'bar' as const,
+                toolbar: { show: false },
+                animations: { enabled: true, easing: 'easeinout', speed: 800 }
+            },
+            plotOptions: {
+                bar: {
+                    borderRadius: 10,
+                    columnWidth: '60%',
+                    distributed: true,
+                    dataLabels: { position: 'top' }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                offsetY: -20,
+                style: { fontSize: '12px', colors: ["#304758"] }
+            },
+            colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
+            xaxis: {
+                categories: Object.keys(counts).map(key => key === 'not specified' ? key : key + "-" + (parseInt(key) + binSize)),
+                position: 'bottom',
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                title: {
+                    text: 'Salary',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            yaxis: {
+                axisBorder: { show: false },
+                axisTicks: { show: false },
+                labels: {
+                    show: true,
+                    formatter: (val: number) => Math.floor(val).toString()
+                },
+                title: {
+                    text: 'Number of Jobs',
+                    style: { color: '#64748b', fontWeight: 600 }
+                }
+            },
+            grid: {
+                borderColor: '#f1f5f9',
+                strokeDashArray: 4
+            },
+            tooltip: { theme: 'light' },
+            theme: { palette: 'palette1' }
+        }
+    }
+})
+
 </script>
 
 <style scoped>

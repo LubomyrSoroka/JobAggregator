@@ -9,6 +9,8 @@
 "if (type === 'week' || type === 'weekly') return baseVal.map(value => value * 52);
     if (type === 'month' || type === 'monthly') return baseVal.map(value => value * 12);"
 - Check if sortJobs is working while using the AI Enhancer.
+- Allow scrapers to yield arrays of jobs instead of a single job.
+- FilterJobWithAI should check if there is a job with the same description, to avoid reprocessing the same description. 
 
 
 # DONE

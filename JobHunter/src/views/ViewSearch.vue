@@ -18,14 +18,14 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                        }} in total</div>
+                            }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                        }} Since Last
+                            }} Since Last
                             Search</div>
                         <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                             repostCount === 1 ? 'Job' : 'Jobs'
-                        }} </div>
+                            }} </div>
                         <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                             {{
                                 irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -205,7 +205,7 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                        }}</span>
+                                            }}</span>
                                     </div>
                                 </div>
                                 <a v-if="job.website" :href="job.website" target="_blank" class="job-full-company">{{
@@ -265,6 +265,7 @@ import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
 import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
+import { parseNumeric, calculateYearlySalary } from '@/components/salary'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
@@ -342,31 +343,6 @@ const displayedJobs = computed(() => {
 })
 
 
-
-function parseNumeric(val: any): number[] | null {
-    if (typeof val === 'number') return [val];
-    if (!val || typeof val !== 'string') return null;
-    const cleaned = val.replace(/[^0-9.-]/g, '');
-    if (cleaned.includes('-')) {
-        const parts = cleaned.split('-').map(p => parseFloat(p)).filter(p => !isNaN(p));
-        if (parts.length === 0) return null;
-        return parts;
-    }
-    const parsed = parseFloat(cleaned);
-    return isNaN(parsed) ? null : [parsed];
-}
-
-function calculateYearlySalary(job: any): number[] | null {
-    const baseVal = parseNumeric(job.salaryRange);
-    if (baseVal === null) return null;
-
-    const type = (job.salaryType || '').toLowerCase();
-    // 40 hours per week * 52 weeks per year = 2080 hours per year
-    if (type === 'hourly') return baseVal.map(value => value * 2080);
-    if (type === 'week' || type === 'weekly') return baseVal.map(value => value * 52);
-    if (type === 'month' || type === 'monthly') return baseVal.map(value => value * 12);
-    return baseVal; // Assume yearly if unspecified or already yearly
-}
 
 const formatMoney = (val: number) => {
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
