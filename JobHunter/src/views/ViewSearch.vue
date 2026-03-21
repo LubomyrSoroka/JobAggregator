@@ -191,64 +191,63 @@
                 <div v-for="(jobCard, jobCardIndex) in displayedJobs" :key="jobCard[0]?.url || jobCardIndex"
                     :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
 
-                    <div v-for="(job, index) in jobCard" :key="job.url || index">
-                        <div class="job-content" @click="openJobCard(job)"
-                            v-show="index === (jobCard.currentIndex || 0)">
-                            <div v-if="job.image" class="job-image">
-                                <img :src="job.image" :alt="job.company">
-                            </div>
-                            <div class="job-header" :class="{ 'with-image': job.image }">
-                                <div class="job-title-row">
-                                    <h3 class="job-title">{{ job.positionTitle || 'Untitled Position' }}</h3>
-                                    <div class="badges-row">
-                                        <span v-if="jobCard.length > 1" class="version-badge">
-                                            {{ Number(index) + 1 }} / {{ jobCard.length }}
-                                        </span>
-                                        <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                            }}</span>
-                                    </div>
+                    <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
+                        @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
+                        <div v-if="job.image" class="job-image">
+                            <img :src="job.image" :alt="job.company">
+                        </div>
+                        <div class="job-header" :class="{ 'with-image': job.image }">
+                            <div class="job-title-row">
+                                <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle || `Untitled
+                                    Position` }}</h3>
+                                <div class="badges-row">
+                                    <span v-if="jobCard.length > 1" class="version-badge">
+                                        {{ Number(index) + 1 }} / {{ jobCard.length }}
+                                    </span>
+                                    <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
+                                    }}</span>
                                 </div>
-                                <a v-if="job.website" :href="job.website" target="_blank" class="job-full-company">{{
+                            </div>
+                            <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
+                                class="job-full-company" @click.stop>{{
                                     job.company }}</a>
-                                <div v-else class="job-full-company">{{ job.company }}</div>
-                            </div>
+                            <div v-else :title="job.company" class="job-full-company">{{ job.company }}</div>
+                        </div>
 
-                            <div class="job-meta">
-                                <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
-                                    :class="['meta-item', { 'found-through-ai': meta.isAi }]">
-                                    {{ meta.value }}
-                                </div>
-                            </div>
-
-                            <div v-if="job.requirementsSummary" class="job-description">
-                                {{ job.requirementsSummary }}
-                            </div>
-                            <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
-
-                            <div class="job-footer">
-                                <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
-                                    Save
-                                </button>
-                                <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
-                                    Unsave
-                                </button>
-                                <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                                    class="apply-button" @click.stop>
-                                    Apply Now
-                                </a>
-                            </div>
-                            <div v-if="jobCard.length > 1" class="navigation-controls">
-                                <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
-                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
-                                    <ChevronRight :size="20" />
-                                </div>
-                                <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
-                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
-                                    <ChevronLeft :size="20" />
-                                </div>
+                        <div class="job-meta">
+                            <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
+                                :class="['meta-item', { 'found-through-ai': meta.isAi }]">
+                                {{ meta.value }}
                             </div>
                         </div>
 
+                        <div v-if="job.requirementsSummary" class="job-description">
+                            {{ job.requirementsSummary }}
+                        </div>
+                        <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
+
+                        <div class="job-footer">
+                            <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                Save
+                            </button>
+                            <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                Unsave
+                            </button>
+                            <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
+                                class="apply-button" @click.stop>
+                                Apply Now
+                            </a>
+                        </div>
+                        <div v-if="jobCard.length > 1" class="navigation-controls">
+                            <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
+                                @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
+                                <ChevronRight :size="20" />
+                            </div>
+                            <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
+                                @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
+                                <ChevronLeft :size="20" />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1025,6 +1024,14 @@ onMounted(async () => {
     color: #3b82f6;
     font-weight: 600;
     text-decoration: none;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    pointer-events: auto;
+    white-space: pre-line;
 }
 
 .job-full-meta {
@@ -1112,13 +1119,13 @@ onMounted(async () => {
 }
 
 .view-search-container {
-    max-width: 1200px;
+    max-width: 95%;
     margin: 0 auto;
-    padding: 40px 20px;
+    padding: 24px 20px;
 }
 
 .view-header {
-    margin-bottom: 40px;
+    margin-bottom: 24px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1166,7 +1173,7 @@ onMounted(async () => {
 
 .job-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 24px;
 }
 
@@ -1219,11 +1226,13 @@ onMounted(async () => {
 }
 
 .job-content {
-    padding: 24px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     flex: 1;
 }
+
 
 .job-header {
     margin-bottom: 16px;
@@ -1249,6 +1258,14 @@ onMounted(async () => {
     margin: 0;
     line-height: 1.4;
     flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    pointer-events: auto;
+    white-space: pre-line;
 }
 
 .scraper-badge {
@@ -1271,12 +1288,12 @@ onMounted(async () => {
 .job-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 6px;
     margin-bottom: 20px;
 }
 
 .meta-item {
-    font-size: 13px;
+    font-size: 10px;
     color: #64748b;
     background: #f1f5f9;
     padding: 4px 10px;
@@ -1437,7 +1454,7 @@ onMounted(async () => {
     border: 1px solid #e2e8f0;
     border-radius: 20px;
     padding: 24px;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;

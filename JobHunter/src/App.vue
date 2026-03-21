@@ -32,7 +32,7 @@ import Profile from './components/Profile.vue'
 
 .header-content {
   width: 100%;
-  max-width: 1200px;
+  max-width: 90%;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
