@@ -18,14 +18,14 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                            }} in total</div>
+                        }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
+                        }} Since Last
                             Search</div>
                         <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                             repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
+                        }} </div>
                         <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                             {{
                                 irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -205,7 +205,7 @@
                                         {{ Number(index) + 1 }} / {{ jobCard.length }}
                                     </span>
                                     <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                    }}</span>
+                                        }}</span>
                                 </div>
                             </div>
                             <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -250,6 +250,11 @@
                         </div>
                     </div>
                 </div>
+                <Transition name="scroll-fade">
+                    <div v-if="showScrollUpButton" class="scroll-up-button" @click="scrollToTop">
+                        <ChevronUp :size="20" />
+                    </div>
+                </Transition>
             </div>
         </div>
         <JobStats v-if="!viewSearch" :jobs="jobs" />
@@ -262,7 +267,7 @@ import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
-import { ChevronRight, ChevronLeft } from 'lucide-vue-next'
+import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
 import { parseNumeric, calculateYearlySalary } from '@/components/salary'
 
@@ -296,7 +301,14 @@ const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
 const aiFilters = ref<Filter[]>(defaultFilters)
+const showScrollUpButton = ref(false)
 
+const scrollToTop = () => {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    })
+}
 const irrelevantCount = computed(() => {
     return jobs.value.filter(job => !(job.isRelevantJob ?? true)).length
 })
@@ -800,7 +812,6 @@ const getJobLink = (job: any) => {
     }
     return url
 }
-
 onMounted(async () => {
     try {
         const state = window.history.state
@@ -809,6 +820,13 @@ onMounted(async () => {
         } else {
             loading.value = false
         }
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 100) {
+                showScrollUpButton.value = true
+            } else {
+                showScrollUpButton.value = false
+            }
+        })
     } catch (e) {
         console.error('Failed to parse search results:', e)
         loading.value = false
@@ -817,6 +835,41 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.scroll-up-button {
+    position: fixed;
+    bottom: 50px;
+    right: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    z-index: 1000;
+    background-color: #3b82f6;
+    color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    width: 50px;
+    height: 50px;
+}
+
+.scroll-up-button:hover {
+    transform: scale(1.1);
+}
+
+/* Button Animation */
+.scroll-fade-enter-active,
+.scroll-fade-leave-active {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scroll-fade-enter-from,
+.scroll-fade-leave-to {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+}
+
 .arrow-right {
     position: absolute;
     right: 20px;

@@ -13,10 +13,12 @@
 - Should the height of each job card be the same? (Currently, I think this is only the case for cards on the same row)
 - May want to keep only one of salary or salary estimate for the meta items to preserve space.
 - Can experiment and add scrolling to each of the individual job cards. (would this make it more awkward to scroll the whole page?)
-- Add tooltips to the job cards to display the full job title and company name.
 - Allow users to download the current data as JSON.
+- Is the stats tab calculating based off the last search or all the data?
+- Instead of tooltips can have the job title and company name be automatically rotating horizontally if they are too long. (This could look awkward)
 
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
 - In the stats tab, display salary info 
+- Add tooltips to the job cards to display the full job title and company name.
