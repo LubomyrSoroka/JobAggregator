@@ -12,8 +12,6 @@
             <div>Code</div>
             <textarea v-model="code" placeholder="Enter your code here..."></textarea>
         </div>
-        <div>Credits</div>
-        <input v-model="credits" placeholder="Enter your credits...">
         <div>Job URL</div>
         <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
         <div class="buttons">
@@ -49,12 +47,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ScraperParameter } from '../models'
+import { onBeforeRouteLeave } from 'vue-router'
 const code = ref('');
 const scraperName = ref('');
 const error = ref('');
-const credits = ref('');
 const outputCount = ref(0);
 const jobLinkTemplate = ref('');
 const output = ref('');
@@ -62,6 +60,8 @@ const runMenu = ref(false);
 const parameters = ref<ScraperParameter[]>([]);
 let originalName: string | null = null;
 const confirmDelete = ref(false);
+let originalCodeValue: string | undefined = undefined;
+let originalJobLinkTemplateValue: string | undefined = undefined;
 
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -70,10 +70,34 @@ onMounted(() => {
     if (scraperName.value) {
         const data = JSON.parse(localStorage.getItem(scraperName.value) || '{}')
         code.value = data.code || ''
-        credits.value = data.credits || ''
         parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_run_args`) || '[]')
         jobLinkTemplate.value = data.jobLinkTemplate || ''
     }
+
+    // Set value after data is loaded so we have the correct base for comparison
+    originalCodeValue = code.value;
+    originalJobLinkTemplateValue = jobLinkTemplate.value;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue) {
+            event.preventDefault();
+            event.returnValue = '';
+        }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    onUnmounted(() => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+    });
+})
+
+onBeforeRouteLeave((to, from, next) => {
+    if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue) {
+        const answer = window.confirm('You have unsaved changes. Do you really want to leave?');
+        if (!answer) return next(false);
+    }
+    next();
 })
 
 const deleteScraper = () => {
@@ -101,7 +125,10 @@ const saveScraper = () => {
         });
         localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers));
     }
-    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, credits: credits.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames() }))
+    originalName = scraperName.value;
+    originalCodeValue = code.value;
+    originalJobLinkTemplateValue = jobLinkTemplate.value;
+    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames() }))
     let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
     if (!myScrapers.includes(scraperName.value)) {
         myScrapers.push(scraperName.value)
