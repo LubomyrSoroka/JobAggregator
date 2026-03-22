@@ -16,7 +16,10 @@
 - Allow users to download the current data as JSON.
 - Is the stats tab calculating based off the last search or all the data?
 - Instead of tooltips can have the job title and company name be automatically rotating horizontally if they are too long. (This could look awkward)
-
+- Need to use a color scheme instead of assigning constants as colors everywhere.
+- Refactor: Should've made the up-arrow into a component.
+- Searches and scrapers should be given ids.
+- There is no need to have a {scraper_name}_parameters key in the local storage. It should just be part of the scraper object.
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.

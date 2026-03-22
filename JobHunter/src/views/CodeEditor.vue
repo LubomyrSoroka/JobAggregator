@@ -19,23 +19,32 @@
         <div class="buttons">
             <button @click="saveScraper">Save</button>
             <button @click="openRunMenu">Run</button>
-        </div>
-        <div v-if="runMenu" class="run-menu">
-            <button class="close" @click="runMenu = false">X</button>
-            <div>
-                <div v-for="parameter in parameters" :key="parameter.name">
-                    <label :for="parameter.name">{{ parameter.name }}</label>
-                    <input :id="parameter.name" v-model="parameter.value" />
-                </div>
-                <button @click="runScraper">Run</button>
-            </div>
+            <button @click="confirmDelete = true">Delete</button>
         </div>
         <div v-if="output" class="output">
             <div>Output Count: {{ outputCount }}</div>
             <div>Output</div>
             <textarea readonly v-model="output"></textarea>
         </div>
-
+    </div>
+    <div v-if="runMenu" class="dimmed-background">
+        <div class="run-menu">
+            <button class="close" @click="runMenu = false">X</button>
+            <div v-for="parameter in parameters" :key="parameter.name">
+                <label :for="parameter.name">{{ parameter.name }}</label>
+                <input :id="parameter.name" v-model="parameter.value" />
+            </div>
+            <button @click="runScraper">Run</button>
+        </div>
+    </div>
+    <div class="dimmed-background" v-if="confirmDelete">
+        <div class="confirm-delete-content">
+            <div class="confirm-delete-title">Are you sure you want to delete this scraper?</div>
+            <div class="confirm-delete-buttons">
+                <button class="cancel-button" @click="confirmDelete = false">Cancel</button>
+                <RouterLink class="delete-button" to="/" @click="deleteScraper">Delete</RouterLink>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -51,52 +60,74 @@ const jobLinkTemplate = ref('');
 const output = ref('');
 const runMenu = ref(false);
 const parameters = ref<ScraperParameter[]>([]);
+let originalName: string | null = null;
+const confirmDelete = ref(false);
+
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search)
     scraperName.value = urlParams.get('scraper-name') || ''
+    originalName = scraperName.value;
     if (scraperName.value) {
         const data = JSON.parse(localStorage.getItem(scraperName.value) || '{}')
         code.value = data.code || ''
         credits.value = data.credits || ''
-        parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_parameters`) || '[]')
+        parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_run_args`) || '[]')
         jobLinkTemplate.value = data.jobLinkTemplate || ''
     }
 })
+
+const deleteScraper = () => {
+    localStorage.removeItem(scraperName.value);
+    let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
+    myScrapers = myScrapers.filter((scraper: string) => scraper !== scraperName.value)
+    localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers))
+}
 
 const saveScraper = () => {
     if (!scraperName.value) {
         error.value = 'Please enter a scraper name'
         return
     }
-    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, credits: credits.value, jobLinkTemplate: jobLinkTemplate.value }))
+    if (originalName && originalName !== scraperName.value) {
+        localStorage.removeItem(originalName);
+        localStorage.removeItem(`${originalName}_run_args`);
+        localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
+        let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]');
+        myScrapers = myScrapers.map((scraper: string) => {
+            if (scraper === originalName) {
+                return scraperName.value;
+            }
+            return scraper;
+        });
+        localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers));
+    }
+    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, credits: credits.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames() }))
     let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
     if (!myScrapers.includes(scraperName.value)) {
         myScrapers.push(scraperName.value)
         localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers))
     }
 }
-const openRunMenu = () => {
-    runMenu.value = true;
+const getParameterNames = () => {
     const match = code.value.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
         code.value.match(/const\s+scrape\s*=\s*(?:async\s*)?\(([^)]*)\)/);
-
     if (match) {
         const names = (match[1] || '').split(',')
             .map(p => (p.split('=')[0] || '').trim())
             .filter(p => p);
-
-        parameters.value = names.map(name => {
-            const existing = parameters.value.find(p => p.name === name);
-            return { name, value: existing ? existing.value : '' };
-        });
+        return names;
     }
+    return [];
+}
+const openRunMenu = () => {
+    runMenu.value = true;
+    const names = getParameterNames();
+    parameters.value = names.map(name => {
+        const existing = parameters.value.find(p => p.name === name);
+        return { name, value: existing ? existing.value : '' };
+    });
 }
 
-// what format should I expect the scraper to return?
-// json with the following:
-// an array of
-// position title, company, salary-range (or just the salary), salary-type (yearly or hourly), url, description, date-posted, location, apply-link, image
-// all optional
 const runScraper = async () => {
     output.value = '';
     error.value = '';
@@ -109,7 +140,7 @@ const runScraper = async () => {
         `)();
 
         if (typeof scraper === 'function') {
-            localStorage.setItem(`${scraperName.value}_parameters`, JSON.stringify(parameters.value))
+            localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
             const result = await scraper(...parameters.value.map(p => p.value));
             // there should be a loading screen after this
             runMenu.value = false;
@@ -142,10 +173,57 @@ const runScraper = async () => {
 </script>
 
 <style scoped>
-.run-menu div {
+.confirm-delete-buttons {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+}
+
+.delete-button {
+    background-color: red;
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.cancel-button {
+    background-color: #444444;
+    color: white;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.dimmed-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.confirm-delete-content {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+.run-menu div {
+    display: flex;
+    flex-direction: column;
+    z-index: 101;
 }
 
 .run-menu input {

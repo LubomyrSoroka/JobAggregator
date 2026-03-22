@@ -179,14 +179,14 @@ const openSearchParams = (scraperName: string) => {
 
     // Check if this scraper is already in the search being edited
     const existingSearch = savedSearches.value.find(s => s.name === searchName.value);
-    const defaultParams = JSON.parse(localStorage.getItem(`${scraperName}_parameters`) || '[]')
+    const defaultParams = JSON.parse(localStorage.getItem(`${scraperName}`) || '{}').parameters || [];
 
     if (existingSearch && existingSearch.scraperParameters) {
         const savedConfig = existingSearch.scraperParameters.find(c => c.scraperName === scraperName);
         if (savedConfig) {
-            parameters.value = defaultParams.map((dp: any) => {
-                const savedParam = savedConfig.parameters.find(sp => sp.name === dp.name);
-                return new ScraperParameter(dp.name, savedParam ? savedParam.value : '');
+            parameters.value = defaultParams.map((dp: string) => {
+                const savedParam = savedConfig.parameters.find((sp: any) => sp.name === dp);
+                return new ScraperParameter(dp, savedParam ? savedParam.value : '');
             });
             enabled.value = savedConfig.enabled;
             return;
@@ -194,7 +194,7 @@ const openSearchParams = (scraperName: string) => {
     }
 
     // Fallback: load default parameters for this scraper
-    parameters.value = defaultParams.map((p: any) => new ScraperParameter(p.name, ''))
+    parameters.value = defaultParams.map((p: string) => new ScraperParameter(p, ''))
     enabled.value = false;
 }
 
