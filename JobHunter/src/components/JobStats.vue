@@ -3,24 +3,33 @@
         <div class="stats-card">
             <h2 class="stats-title">Jobs by Years of Experience</h2>
             <div v-if="jobs.length > 0" class="chart-container">
-                <VueApexCharts width="100%" height="450" :options="chartData.options" :series="chartData.series">
-                </VueApexCharts>
+                <div :style="{ minWidth: chartData.minWidth }">
+                    <VueApexCharts width="100%" height="450" :options="chartData.options" :series="chartData.series">
+                    </VueApexCharts>
+                </div>
             </div>
-            <h2 class="">Hiring Platform</h2>
+            <h2 class="stats-title">Hiring Platform</h2>
             <div v-if="jobs.length > 0" class="chart-container">
-                <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
-                    :series="hiringPlatformData.series">
-                </VueApexCharts>
+                <div :style="{ minWidth: hiringPlatformData.minWidth }">
+                    <VueApexCharts width="100%" height="450" :options="hiringPlatformData.options"
+                        :series="hiringPlatformData.series">
+                    </VueApexCharts>
+                </div>
             </div>
-            <h2 class="">Keywords</h2>
+            <h2 class="stats-title">Keywords</h2>
             <div v-if="jobs.length > 0" class="chart-container">
-                <VueApexCharts width="100%" height="450" :options="keywordData.options" :series="keywordData.series">
-                </VueApexCharts>
+                <div :style="{ minWidth: keywordData.minWidth }">
+                    <VueApexCharts width="100%" height="450" :options="keywordData.options"
+                        :series="keywordData.series">
+                    </VueApexCharts>
+                </div>
             </div>
-            <h2 class="">Salary Range</h2>
+            <h2 class="stats-title">Salary Range</h2>
             <div v-if="jobs.length > 0" class="chart-container">
-                <VueApexCharts width="100%" height="450" :options="salaryData.options" :series="salaryData.series">
-                </VueApexCharts>
+                <div :style="{ minWidth: salaryData.minWidth }">
+                    <VueApexCharts width="100%" height="450" :options="salaryData.options" :series="salaryData.series">
+                    </VueApexCharts>
+                </div>
             </div>
         </div>
     </div>
@@ -66,6 +75,7 @@ const chartData = computed(() => {
     const seriesData = categories.map(cat => counts[cat])
 
     return {
+        minWidth: (categories.length * 70) + 'px',
         series: [{
             name: 'Jobs',
             data: seriesData
@@ -167,6 +177,7 @@ const hiringPlatformData = computed(() => {
     const readableCategories = categories.map(cat => platformLabels[cat] || cat)
 
     return {
+        minWidth: (categories.length * 90) + 'px',
         series: [{
             name: 'Jobs',
             data: seriesData
@@ -232,11 +243,12 @@ const keywordData = computed(() => {
         }
     })
     const sortedCounts = Object.entries(counts).sort((a, b) => b[1] - a[1])
-    const top10 = sortedCounts.slice(0, 10)
+    const top50 = sortedCounts.slice(0, 50)
     return {
+        minWidth: (top50.length * 90) + 'px',
         series: [{
             name: 'Jobs',
-            data: top10.map(item => item[1])
+            data: top50.map(item => item[1])
         }],
         options: {
             chart: {
@@ -259,7 +271,7 @@ const keywordData = computed(() => {
             },
             colors: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'],
             xaxis: {
-                categories: top10.map(item => item[0]),
+                categories: top50.map(item => item[0]),
                 position: 'bottom',
                 axisBorder: { show: false },
                 axisTicks: { show: false },
@@ -309,7 +321,9 @@ const salaryData = computed(() => {
         }
     })
 
+    const categories = Object.keys(counts)
     return {
+        minWidth: (categories.length * 100) + 'px',
         series: [{
             name: 'Jobs',
             data: Object.values(counts)
@@ -390,5 +404,9 @@ const salaryData = computed(() => {
 
 .chart-container {
     margin-bottom: 40px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 10px;
+    /* Space for the scrollbar */
 }
 </style>
