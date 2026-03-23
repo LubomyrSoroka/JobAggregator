@@ -20,6 +20,7 @@
 - Refactor: Should've made the up-arrow into a component.
 - Searches and scrapers should be given ids.
 - There is no need to have a {scraper_name}_parameters key in the local storage. It should just be part of the scraper object.
+- Show a temporary message in the bottom right corner when you save something.
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
