@@ -4,24 +4,31 @@ import Profile from './components/Profile.vue'
 </script>
 
 <template>
-  <header class="app-header">
-    <div class="header-content">
-      <div class="logo">JobHunter</div>
-      <Profile />
-    </div>
-  </header>
-  <main class="app-main">
-    <RouterView />
-  </main>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="header-content">
+        <div class="logo">JobHunter</div>
+        <Profile />
+      </div>
+    </header>
+    <main class="app-main">
+      <RouterView />
+    </main>
+  </div>
 </template>
 
 <style scoped>
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
 .app-header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
+  flex: 0 0 60px;
+  /* Fixed height for header, or omit for dynamic */
   background-color: white;
   border-bottom: 1px solid #e2e8f0;
   z-index: 100;
@@ -46,7 +53,11 @@ import Profile from './components/Profile.vue'
 }
 
 .app-main {
-  margin-top: 60px;
-  padding: 20px;
+  flex: 1;
+  overflow: hidden;
+  /* Crucial for internal scrollbars in views */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 </style>

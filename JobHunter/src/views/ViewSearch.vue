@@ -18,14 +18,14 @@
                             'Card' : 'Cards') }} Displayed</div>
                         <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                             'Jobs'
-                        }} in total</div>
+                            }} in total</div>
                         <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                             newJobCount === 1 ? 'Job' : 'Jobs'
-                        }} Since Last
+                            }} Since Last
                             Search</div>
                         <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                             repostCount === 1 ? 'Job' : 'Jobs'
-                        }} </div>
+                            }} </div>
                         <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                             {{
                                 irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -205,7 +205,7 @@
                                         {{ Number(index) + 1 }} / {{ jobCard.length }}
                                     </span>
                                     <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                        }}</span>
+                                    }}</span>
                                 </div>
                             </div>
                             <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -1172,9 +1172,13 @@ onMounted(async () => {
 }
 
 .view-search-container {
-    max-width: 95%;
-    margin: 0 auto;
-    padding: 24px 20px;
+    flex: 1;
+    overflow-y: auto;
+    width: 90%;
+    padding: 20px 0px;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .view-header {

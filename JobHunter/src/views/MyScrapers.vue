@@ -18,19 +18,27 @@ onMounted(() => {
 </script>
 
 <template>
+    <div class="my-scrapers-page">
+        <div class="my-scrapers">
+            My Scrapers
+        </div>
 
-    <div class="my-scrapers">
-        My Scrapers
+        <div class="scrapers-list">
+            <RouterLink v-for="scraper in scrapers" :key="scraper" class="scraper"
+                :to="`/code-editor?scraper-name=${scraper}`">
+                {{ scraper }}
+            </RouterLink>
+            <RouterLink class="add" to="/code-editor">
+                +
+            </RouterLink>
+        </div>
     </div>
-
-    <div class="scrapers-list">
-        <RouterLink v-for="scraper in scrapers" :key="scraper" class="scraper"
-            :to="`/code-editor?scraper-name=${scraper}`">
-            {{ scraper }}
-        </RouterLink>
-        <RouterLink class="add" to="/code-editor">
-            +
-        </RouterLink>
-    </div>
-
 </template>
+
+<style scoped>
+.my-scrapers-page {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+}
+</style>

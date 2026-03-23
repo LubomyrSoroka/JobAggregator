@@ -32,6 +32,11 @@ const router = createRouter({
       name: 'settings',
       component: () => import('../views/Settings.vue'),
     },
+    {
+      path: '/edit-search',
+      name: 'EditSearch',
+      component: () => import('../views/EditSearch.vue'),
+    },
   ],
 })
 

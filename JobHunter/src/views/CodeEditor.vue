@@ -28,7 +28,7 @@
     <div v-if="runMenu" class="dimmed-background">
         <div class="run-menu">
             <button class="close" @click="runMenu = false">X</button>
-            <div v-for="parameter in parameters" :key="parameter.name">
+            <div class="run-menu-parameters" v-for="parameter in parameters" :key="parameter.name">
                 <label :for="parameter.name">{{ parameter.name }}</label>
                 <input :id="parameter.name" v-model="parameter.value" />
             </div>
@@ -200,57 +200,40 @@ const runScraper = async () => {
 </script>
 
 <style scoped>
-.confirm-delete-buttons {
+.run-menu {
+    position: absolute;
     display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-}
-
-.delete-button {
-    background-color: red;
-    color: white;
-    text-decoration: none;
-    cursor: pointer;
-    border-radius: 8px;
-    padding: 8px;
-}
-
-.cancel-button {
-    background-color: #444444;
-    color: white;
-    text-decoration: none;
-    cursor: pointer;
-    border-radius: 8px;
-    padding: 8px;
-}
-
-.dimmed-background {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-}
-
-.confirm-delete-content {
-    background-color: white;
-    padding: 20px;
-    border-radius: 8px;
-    display: flex;
+    width: 50%;
+    height: 50%;
+    margin: auto;
     flex-direction: column;
-    gap: 10px;
-}
-
-.run-menu div {
-    display: flex;
-    flex-direction: column;
+    justify-content: space-between;
+    overflow-y: auto;
     z-index: 101;
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    gap: 10px;
+}
+
+.run-menu-parameters {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    width: 100%;
+}
+
+.run-menu-parameters label {
+    flex: 0 0 120px;
+    /* Fixed width for labels */
+    font-weight: 500;
+    color: #4b5563;
+    text-align: left;
+}
+
+.run-menu-parameters input {
+    flex: 1;
+    /* Input takes up all remaining space */
 }
 
 .run-menu input {
