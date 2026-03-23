@@ -1,263 +1,268 @@
 <template>
-    <div class="view-search-container">
-        <header class="view-header">
-            <div class="back-button" @click="$router.push('/search')">
-                <span class="icon">←</span> Back to Searches
-            </div>
-            <div class="tabs">
-                <div @click="viewSearch = true" :class="viewSearch ? 'selected' : 'not-selected'">Search Results</div>
-                <div @click="viewSearch = false" :class="!viewSearch ? 'selected' : 'not-selected'">Stats</div>
-            </div>
-        </header>
-        <div v-if="viewSearch">
-            <div class="control-panel">
-                <div class="panel-main">
-                    <div class="results-info">
-                        <span class="results-label">Search Results</span>
-                        <div class="results-badge">{{ displayedJobs.length }} {{ 'Job ' + (displayedJobs.length === 1 ?
-                            'Card' : 'Cards') }} Displayed</div>
-                        <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
-                            'Jobs'
-                            }} in total</div>
-                        <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
-                            newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
-                            Search</div>
-                        <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
-                            repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
-                        <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
-                            {{
-                                irrelevantCount === 1 ? 'Job' : 'Jobs'
-                            }} Found
-                        </div>
+    <div class="view-content-centered">
+        <div class="view-search-container">
+            <header class="view-header">
+                <div class="back-button" @click="$router.push('/search')">
+                    <span class="icon">←</span> Back to Searches
+                </div>
+                <div class="tabs">
+                    <div @click="viewSearch = true" :class="viewSearch ? 'selected' : 'not-selected'">Search Results
                     </div>
-
-                    <div class="panel-actions">
-                        <div class="control-group sort-group">
-                            <span class="control-label">Sort By</span>
-                            <div class="select-wrapper">
-                                <select v-model="sortDirection" @change="sortJobs" class="styled-select direction">
-                                    <option value="asc">↑ Asc</option>
-                                    <option value="desc">↓ Desc</option>
-                                </select>
-                                <select v-model="sortPriority" @change="sortJobs" class="styled-select priority">
-                                    <option v-for="p in priorityOptions" :value="p">P{{ p }}</option>
-                                </select>
-                                <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs"
-                                    class="styled-select target">
-                                    <option v-for="option in sortOptions" :value="option">{{ option }}</option>
-                                </select>
+                    <div @click="viewSearch = false" :class="!viewSearch ? 'selected' : 'not-selected'">Stats</div>
+                </div>
+            </header>
+            <div v-if="viewSearch">
+                <div class="control-panel">
+                    <div class="panel-main">
+                        <div class="results-info">
+                            <span class="results-label">Search Results</span>
+                            <div class="results-badge">{{ displayedJobs.length }} {{ 'Job ' + (displayedJobs.length ===
+                                1 ?
+                                'Card' : 'Cards') }} Displayed</div>
+                            <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
+                                'Jobs'
+                                }} in total</div>
+                            <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
+                                newJobCount === 1 ? 'Job' : 'Jobs'
+                                }} Since Last
+                                Search</div>
+                            <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
+                                repostCount === 1 ? 'Job' : 'Jobs'
+                                }} </div>
+                            <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
+                                {{
+                                    irrelevantCount === 1 ? 'Job' : 'Jobs'
+                                }} Found
                             </div>
                         </div>
 
-                        <div class="control-group filter-group">
-                            <label class="toggle-switch">
-                                <input type="checkbox" v-model="savedOnly">
-                                <span class="slider"></span>
-                                <span class="toggle-label">
-                                    Saved Only
-                                </span>
-                            </label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" v-model="latestSearchOnly">
-                                <span class="slider"></span>
-                                <span class="toggle-label">
-                                    Latest Search Only
-                                </span>
-                            </label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" v-model="noReposts">
-                                <span class="slider"></span>
-                                <span class="toggle-label">
-                                    No Reposts
-                                </span>
-                            </label>
-                            <label class="toggle-switch">
-                                <input type="checkbox" v-model="relevantOnly">
-                                <span class="slider"></span>
-                                <span class="toggle-label">
-                                    Relevant Only
-                                </span>
-                            </label>
-                        </div>
-
-                        <div class="control-group ai-trigger-group">
-                            <button @click="showAiModal = true" class="ai-trigger-button">
-                                AI Enhancer
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- AI Modal -->
-            <div v-if="showAiModal" class="ai-modal">
-                <div class="close" @click="showAiModal = false">✕</div>
-                <div class="search-header">
-                    <div class="header-info">
-                        <span class="header-tag">AI Enhancements</span>
-                        <h2 class="modal-title">Tune Search with AI</h2>
-                    </div>
-                </div>
-
-                <div class="ai-modal-content">
-                    <AIFilters :filters="aiFilters" id-prefix="view-modal" />
-
-                    <button class="primary-button ai-run-button large" @click="() => { runAI(); showAiModal = false; }"
-                        :disabled="aiFiltering || aiFilters.every((filter: Filter) => !filter.value)">
-                        <span v-if="aiFiltering" class="inline-loader"></span>
-                        {{ aiFiltering ? 'Processing...' : 'Run AI Analysis' }}
-                    </button>
-                </div>
-            </div>
-
-
-            <div v-if="aiFiltering" class="ai-progress-banner">
-                <div class="mini-loader"></div>
-                <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
-                    displayedJobs.length }}</span>
-            </div>
-
-            <div v-if="aiError" class="ai-error-banner">
-                <span class="error-icon">⚠️</span>
-                <span class="error-message">{{ aiError }}</span>
-                <button class="close-error" @click="aiError = null">✕</button>
-            </div>
-
-            <div v-if="loading && jobs.length === 0" class="loading-state">
-                <div class="loader"></div>
-                <p>Processing results...</p>
-            </div>
-            <div v-else-if="loading && jobs.length > 0" class="ai-progress-banner">
-                <div class="mini-loader"></div>
-                <p>Processing results...</p>
-            </div>
-
-            <div v-else-if="jobs.length === 0" class="empty-state">
-                <div class="empty-icon">📭</div>
-                <h2>No jobs found</h2>
-                <p>Try adjusting your search parameters or enabling more scrapers.</p>
-                <button class="primary-button" @click="$router.push('/search')">Go Back</button>
-            </div>
-
-            <!-- Job Details Sidebar Overlay -->
-            <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
-            <div :class="['job-full', { 'active': selectedJob }]">
-                <div v-if="selectedJob" class="job-full-content">
-                    <button class="close-sidebar" @click="closeJobCard">✕</button>
-                    <div class="job-full-header">
-                        <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
-                        <a v-if="selectedJob.website" :href="selectedJob.website" target="_blank"
-                            class="job-full-company">{{ selectedJob.company }}</a>
-                        <div v-else class="job-full-company">{{ selectedJob.company }}</div>
-                    </div>
-                    <div class="job-full-meta">
-                        <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
-                            :class="['job-full-meta-item', { 'found-through-ai': meta.isAi }]">
-                            <span class="meta-label">{{ meta.label }}:</span> {{ meta.value }}
-                        </div>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <label class="keywords-label">Keywords:</label>
-                        <div class="keywords-container">
-                            <div v-for="(keyword, index) in selectedJob.keywords" :key="index" class="keyword-item">
-                                {{ keyword }}
-                            </div>
-                        </div>
-                    </div>
-                    <hr class="divider">
-                    <div class="job-full-description" v-html="selectedJob.description"></div>
-                    <div class="job-full-footer">
-                        <a v-if="selectedJob.applyLink || selectedJob.url"
-                            :href="selectedJob.applyLink || selectedJob.url" target="_blank"
-                            class="primary-button apply-large">
-                            Apply for this position
-                        </a>
-                        <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)" target="_blank"
-                            class="primary-button">
-                            Find Employees
-                        </a>
-                        <a v-if="selectedJobLink" class="primary-button" :href="selectedJobLink" target="_blank">
-                            View Job on Original Site
-                        </a>
-
-                    </div>
-                </div>
-            </div>
-
-            <!-- Main Grid remains visible -->
-            <div v-if="displayedJobs.length > 0" class="job-grid">
-                <div v-for="(jobCard, jobCardIndex) in displayedJobs" :key="jobCard[0]?.url || jobCardIndex"
-                    :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
-
-                    <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
-                        @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
-                        <div v-if="job.image" class="job-image">
-                            <img :src="job.image" :alt="job.company">
-                        </div>
-                        <div class="job-header" :class="{ 'with-image': job.image }">
-                            <div class="job-title-row">
-                                <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle || `Untitled
-                                    Position` }}</h3>
-                                <div class="badges-row">
-                                    <span v-if="jobCard.length > 1" class="version-badge">
-                                        {{ Number(index) + 1 }} / {{ jobCard.length }}
-                                    </span>
-                                    <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                    }}</span>
+                        <div class="panel-actions">
+                            <div class="control-group sort-group">
+                                <span class="control-label">Sort By</span>
+                                <div class="select-wrapper">
+                                    <select v-model="sortDirection" @change="sortJobs" class="styled-select direction">
+                                        <option value="asc">↑ Asc</option>
+                                        <option value="desc">↓ Desc</option>
+                                    </select>
+                                    <select v-model="sortPriority" @change="sortJobs" class="styled-select priority">
+                                        <option v-for="p in priorityOptions" :value="p">P{{ p }}</option>
+                                    </select>
+                                    <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs"
+                                        class="styled-select target">
+                                        <option v-for="option in sortOptions" :value="option">{{ option }}</option>
+                                    </select>
                                 </div>
                             </div>
-                            <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
-                                class="job-full-company" @click.stop>{{
-                                    job.company }}</a>
-                            <div v-else :title="job.company" class="job-full-company">{{ job.company }}</div>
-                        </div>
 
-                        <div class="job-meta">
-                            <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
-                                :class="['meta-item', { 'found-through-ai': meta.isAi }]">
-                                {{ meta.value }}
+                            <div class="control-group filter-group">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="savedOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Saved Only
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="latestSearchOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Latest Search Only
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="noReposts">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        No Reposts
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="relevantOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Relevant Only
+                                    </span>
+                                </label>
                             </div>
-                        </div>
 
-                        <div v-if="job.requirementsSummary" class="job-description">
-                            {{ job.requirementsSummary }}
-                        </div>
-                        <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
-
-                        <div class="job-footer">
-                            <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
-                                Save
-                            </button>
-                            <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
-                                Unsave
-                            </button>
-                            <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                                class="apply-button" @click.stop>
-                                Apply Now
-                            </a>
-                        </div>
-                        <div v-if="jobCard.length > 1" class="navigation-controls">
-                            <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
-                                @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
-                                <ChevronRight :size="20" />
-                            </div>
-                            <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
-                                @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
-                                <ChevronLeft :size="20" />
+                            <div class="control-group ai-trigger-group">
+                                <button @click="showAiModal = true" class="ai-trigger-button">
+                                    AI Enhancer
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <Transition name="scroll-fade">
-                    <div v-if="showScrollUpButton" class="scroll-up-button" @click="scrollToTop">
-                        <ChevronUp :size="20" />
+
+                <!-- AI Modal -->
+                <div v-if="showAiModal" class="ai-modal">
+                    <div class="close" @click="showAiModal = false">✕</div>
+                    <div class="search-header">
+                        <div class="header-info">
+                            <span class="header-tag">AI Enhancements</span>
+                            <h2 class="modal-title">Tune Search with AI</h2>
+                        </div>
                     </div>
-                </Transition>
+
+                    <div class="ai-modal-content">
+                        <AIFilters :filters="aiFilters" id-prefix="view-modal" />
+
+                        <button class="primary-button ai-run-button large"
+                            @click="() => { runAI(); showAiModal = false; }"
+                            :disabled="aiFiltering || aiFilters.every((filter: Filter) => !filter.value)">
+                            <span v-if="aiFiltering" class="inline-loader"></span>
+                            {{ aiFiltering ? 'Processing...' : 'Run AI Analysis' }}
+                        </button>
+                    </div>
+                </div>
+
+
+                <div v-if="aiFiltering" class="ai-progress-banner">
+                    <div class="mini-loader"></div>
+                    <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
+                        displayedJobs.length }}</span>
+                </div>
+
+                <div v-if="aiError" class="ai-error-banner">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-message">{{ aiError }}</span>
+                    <button class="close-error" @click="aiError = null">✕</button>
+                </div>
+
+                <div v-if="loading && jobs.length === 0" class="loading-state">
+                    <div class="loader"></div>
+                    <p>Processing results...</p>
+                </div>
+                <div v-else-if="loading && jobs.length > 0" class="ai-progress-banner">
+                    <div class="mini-loader"></div>
+                    <p>Processing results...</p>
+                </div>
+
+                <div v-else-if="jobs.length === 0" class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <h2>No jobs found</h2>
+                    <p>Try adjusting your search parameters or enabling more scrapers.</p>
+                    <button class="primary-button" @click="$router.push('/search')">Go Back</button>
+                </div>
+
+                <!-- Job Details Sidebar Overlay -->
+                <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
+                <div :class="['job-full', { 'active': selectedJob }]">
+                    <div v-if="selectedJob" class="job-full-content">
+                        <button class="close-sidebar" @click="closeJobCard">✕</button>
+                        <div class="job-full-header">
+                            <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
+                            <a v-if="selectedJob.website" :href="selectedJob.website" target="_blank"
+                                class="job-full-company">{{ selectedJob.company }}</a>
+                            <div v-else class="job-full-company">{{ selectedJob.company }}</div>
+                        </div>
+                        <div class="job-full-meta">
+                            <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
+                                :class="['job-full-meta-item', { 'found-through-ai': meta.isAi }]">
+                                <span class="meta-label">{{ meta.label }}:</span> {{ meta.value }}
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <label class="keywords-label">Keywords:</label>
+                            <div class="keywords-container">
+                                <div v-for="(keyword, index) in selectedJob.keywords" :key="index" class="keyword-item">
+                                    {{ keyword }}
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="divider">
+                        <div class="job-full-description" v-html="selectedJob.description"></div>
+                        <div class="job-full-footer">
+                            <a v-if="selectedJob.applyLink || selectedJob.url"
+                                :href="selectedJob.applyLink || selectedJob.url" target="_blank"
+                                class="primary-button apply-large">
+                                Apply for this position
+                            </a>
+                            <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)"
+                                target="_blank" class="primary-button">
+                                Find Employees
+                            </a>
+                            <a v-if="selectedJobLink" class="primary-button" :href="selectedJobLink" target="_blank">
+                                View Job on Original Site
+                            </a>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Grid remains visible -->
+                <div v-if="displayedJobs.length > 0" class="job-grid">
+                    <div v-for="(jobCard, jobCardIndex) in displayedJobs" :key="jobCard[0]?.url || jobCardIndex"
+                        :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
+
+                        <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
+                            @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
+                            <div v-if="job.image" class="job-image">
+                                <img :src="job.image" :alt="job.company">
+                            </div>
+                            <div class="job-header" :class="{ 'with-image': job.image }">
+                                <div class="job-title-row">
+                                    <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle || `Untitled
+                                        Position` }}</h3>
+                                    <div class="badges-row">
+                                        <span v-if="jobCard.length > 1" class="version-badge">
+                                            {{ Number(index) + 1 }} / {{ jobCard.length }}
+                                        </span>
+                                        <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
+                                            }}</span>
+                                    </div>
+                                </div>
+                                <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
+                                    class="job-full-company" @click.stop>{{
+                                        job.company }}</a>
+                                <div v-else :title="job.company" class="job-full-company">{{ job.company }}</div>
+                            </div>
+
+                            <div class="job-meta">
+                                <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
+                                    :class="['meta-item', { 'found-through-ai': meta.isAi }]">
+                                    {{ meta.value }}
+                                </div>
+                            </div>
+
+                            <div v-if="job.requirementsSummary" class="job-description">
+                                {{ job.requirementsSummary }}
+                            </div>
+                            <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
+
+                            <div class="job-footer">
+                                <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                    Save
+                                </button>
+                                <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                    Unsave
+                                </button>
+                                <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
+                                    class="apply-button" @click.stop>
+                                    Apply Now
+                                </a>
+                            </div>
+                            <div v-if="jobCard.length > 1" class="navigation-controls">
+                                <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
+                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
+                                    <ChevronRight :size="20" />
+                                </div>
+                                <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
+                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
+                                    <ChevronLeft :size="20" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <Transition name="scroll-fade">
+                        <div v-if="showScrollUpButton" class="scroll-up-button" @click="scrollToTop">
+                            <ChevronUp :size="20" />
+                        </div>
+                    </Transition>
+                </div>
             </div>
+            <JobStats v-if="!viewSearch" :jobs="jobs" />
         </div>
-        <JobStats v-if="!viewSearch" :jobs="jobs" />
     </div>
 </template>
 
@@ -1171,9 +1176,13 @@ onMounted(async () => {
     background: #3b82f6;
 }
 
+.view-content-centered {
+    width: 100%;
+    overflow-y: auto;
+}
+
 .view-search-container {
     flex: 1;
-    overflow-y: auto;
     width: 90%;
     padding: 20px 0px;
     margin: auto;
