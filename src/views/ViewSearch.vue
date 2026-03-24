@@ -129,6 +129,12 @@
                     <button class="close-error" @click="aiError = null">✕</button>
                 </div>
 
+                <div v-if="searchError" class="ai-error-banner">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-message">{{ searchError }}</span>
+                    <button class="close-error" @click="searchError = null">✕</button>
+                </div>
+
                 <div v-if="loading && jobs.length === 0" class="loading-state">
                     <div class="loader"></div>
                     <p>Processing results...</p>
@@ -307,6 +313,7 @@ const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
 const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
+const searchError = ref<string | null>(null)
 
 const scrollToTop = () => {
     window.scrollTo({
@@ -516,55 +523,63 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
     }
     else {
         jobs.value = JSON.parse(oldJobs).map((job: any) => { job.fromLatestSearch = false; return job; });
-        currentSearch.scraperParameters
-            .filter(config => config.enabled)
-            .forEach(async (scraperConfig) => {
-                if (!scraperCache.has(scraperConfig.scraperName)) {
-                    scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
-                }
-                const scraperData = scraperCache.get(scraperConfig.scraperName);
-                const code = scraperData.code;
-                const parameters = scraperConfig.parameters.map(p => p.value);
+        for (const scraperConfig of currentSearch.scraperParameters.filter(config => config.enabled)) {
+            if (!scraperCache.has(scraperConfig.scraperName)) {
+                scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
+            }
+            const scraperData = scraperCache.get(scraperConfig.scraperName);
+            const code = scraperData.code;
+            const parameters = scraperConfig.parameters.map(p => p.value);
 
-                if (code) {
-                    try {
-                        const scraperFunction = new Function(`
-                            ${code}
-                            return typeof scrape !== 'undefined' ? scrape : null;
-                        `)();
+            if (code) {
+                try {
+                    const scraperFunction = new Function(`
+                        ${code}
+                        return typeof scrape !== 'undefined' ? scrape : null;
+                    `)();
 
-                        if (typeof scraperFunction === 'function') {
-                            const oldJobsMap = new Map<string, any>();
+                    if (typeof scraperFunction === 'function') {
+                        const oldJobsMap = new Map<string, any>();
+                        const oldJobsDescriptionMap = new Map<string, any>();
 
-                            jobs.value.forEach((job: any) => {
-                                let key = JSON.stringify(job);
-                                if (job.id && job.scraperSource) {
-                                    key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
-                                } else {
-                                    key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
-                                }
-                                oldJobsMap.set(key, job);
-                            });
-
-                            for await (let job of scraperFunction(...parameters)) {
-                                job = getExisingDataOneJob(job, oldJobsMap);
-                                if (job) {
-                                    job = await filterJobWithAI(job, currentSearch.filters);
-                                    jobs.value.push(job);
-                                }
+                        jobs.value.forEach((job: any) => {
+                            let key = JSON.stringify(job);
+                            if (job.id) {
+                                key = JSON.stringify({ id: job.id, scraperSource: scraperConfig.scraperName });
+                            } else {
+                                key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
                             }
-                            loading.value = false;
-                            localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value))
+                            oldJobsMap.set(key, job);
+                            oldJobsDescriptionMap.set(JSON.stringify({ title: job.title, company: job.company, description: job.description }), job);
+                        });
+
+                        for await (let job of scraperFunction(...parameters)) {
+                            job.scraperSource = scraperConfig.scraperName;
+                            const isNewJob = getExisingDataOneJob(job, oldJobsMap, oldJobsDescriptionMap);
+                            console.log("isNewJob", isNewJob);
+                            if (isNewJob) {
+                                job = await filterJobWithAI(job, currentSearch.filters);
+                                jobs.value.push(job);
+                            }
                         }
-                    } catch (e) {
-                        console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
+                        localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value))
+                    }
+                } catch (e: any) {
+                    console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
+                    if (e instanceof TypeError && e.message.includes('NetworkError')) {
+                        searchError.value = `CORS Error: The scraper for ${scraperConfig.scraperName} was blocked by the website. Browser scrapers often require a CORS proxy.`;
+                    } else {
+                        searchError.value = `Error running scraper ${scraperConfig.scraperName}: ${e.message || e}`;
                     }
                 }
-            });
+            }
+        }
+        loading.value = false;
     }
 }
 
-const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
+// returns true if the job is new, false otherwise
+const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>) => {
     let key = null;
     let hasId = false;
     if (job.id && job.scraperSource) {
@@ -576,8 +591,8 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
 
     const oldJob = oldJobsMap.get(key);
     if (oldJob) {
-        // this is supposed to check whether the job is a repost. This would only work if the job doesn't have an id
-        if (!hasId && (Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted)) {
+        // this is supposed to check whether the job is a repost.
+        if (!hasId && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))) {
             oldJob.reposted = (oldJob.reposted || 0) + 1;
             repostCount.value++;
             oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
@@ -587,25 +602,27 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
             if (oldJob.reposted > 0)
                 repostCount.value++;
         }
-        return null;
+        return false;
 
     } else {
         if (hasId) {
             key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+            const oldJob = oldJobsDescriptionMap.get(key);
 
-            const oldJob = oldJobsMap.get(key);
-            if ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted)) {
+            if (oldJob && ((oldJob.id && job.id !== oldJob.id) || (!oldJob.id && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))))) {
                 oldJob.reposted = (oldJob.reposted || 0) + 1;
                 repostCount.value++;
                 oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
                 oldJob.fromLatestSearch = true;
+                return false;
             }
-            return null;
 
         }
+        // why don't we check for the case that the job doesn't have an id and it's a repost?
+        // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
         job.fromLatestSearch = true;
         newJobCount.value = newJobCount.value ? newJobCount.value + 1 : 1;
-        return job;
+        return true;
     }
 }
 

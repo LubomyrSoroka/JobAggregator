@@ -21,6 +21,14 @@
 - Searches and scrapers should be given ids.
 - There is no need to have a {scraper_name}_parameters key in the local storage. It should just be part of the scraper object.
 - Show a temporary message in the bottom right corner when you save something.
+- Should have "Run and Save" and "Run" buttons on the Edit Search page.
+- The blue highlight when selecting an input is slightly cut off on the Edit Search page.
+- Need to mention that scrapers should try to throw the errors otherwise viewsearch may have no way of knowing there was an error.
+- If you try to switch between different cards for a stacked card while a scraper is processing, it will just take you back to the first card every time a new job is found.
+- The view-search page should display the name of the search.
+- When finding salaries with the LLM, for a range like "50 - 70 per hour", it should be displayed as $50.00 - $70.00 hourly. For some reason, it's replacing the - with a comma.
+- For finding years it still doesn't always give me the lower bound for the range. e.g for 2-3 years of experience it gives 3 instead of 2.
+- Could seriously consider forcing jobs to have an id. Would definitely simplify some of the logic
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
