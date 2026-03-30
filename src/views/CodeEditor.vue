@@ -14,6 +14,9 @@
         </div>
         <div>Job URL</div>
         <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
+        <div class="run-in-background">
+            <input v-model="runInBackground" type="checkbox"> Run in Background
+        </div>
         <div class="buttons">
             <button @click="saveScraper">Save</button>
             <button @click="openRunMenu">Run</button>
@@ -32,7 +35,7 @@
                 <label :for="parameter.name">{{ parameter.name }}</label>
                 <input :id="parameter.name" v-model="parameter.value" />
             </div>
-            <button @click="runScraper">Run</button>
+            <button @click="runScraper(runInBackground)">Run</button>
         </div>
     </div>
     <div class="dimmed-background" v-if="confirmDelete">
@@ -62,6 +65,8 @@ let originalName: string | null = null;
 const confirmDelete = ref(false);
 let originalCodeValue: string | undefined = undefined;
 let originalJobLinkTemplateValue: string | undefined = undefined;
+let originalRunInBackgroundValue: boolean | undefined = undefined;
+const runInBackground = ref(false);
 
 onMounted(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -72,14 +77,16 @@ onMounted(() => {
         code.value = data.code || ''
         parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_run_args`) || '[]')
         jobLinkTemplate.value = data.jobLinkTemplate || ''
+        runInBackground.value = data.runInBackground || false
     }
 
     // Set value after data is loaded so we have the correct base for comparison
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
+    originalRunInBackgroundValue = runInBackground.value;
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue) {
+        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue || runInBackground.value !== originalRunInBackgroundValue) {
             event.preventDefault();
             event.returnValue = '';
         }
@@ -128,7 +135,8 @@ const saveScraper = () => {
     originalName = scraperName.value;
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
-    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames() }))
+    originalRunInBackgroundValue = runInBackground.value;
+    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames(), runInBackground: runInBackground.value }))
     let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
     if (!myScrapers.includes(scraperName.value)) {
         myScrapers.push(scraperName.value)
@@ -155,23 +163,61 @@ const openRunMenu = () => {
     });
 }
 
-const runScraper = async () => {
+const runScraper = async (inBackground: boolean = false) => {
     output.value = '';
     error.value = '';
 
-    try {
-        // Create a function that executes the code and returns the scrape function
-        const scraper = new Function(`
-            ${code.value}
-            return typeof scrape !== 'undefined' ? scrape : null;
-        `)();
+    localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
 
-        if (typeof scraper === 'function') {
-            localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
-            const result = await scraper(...parameters.value.map(p => p.value));
-            // there should be a loading screen after this
-            runMenu.value = false;
-            outputCount.value = 0;
+    if (inBackground) {
+        runMenu.value = false;
+        outputCount.value = 0;
+        output.value = "Running scraper in background extension...";
+
+        try {
+            const response: any = await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    window.removeEventListener('message', handleMessage);
+                    reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
+                }, 60000);
+
+                const handleMessage = (event: MessageEvent) => {
+                    // We only accept messages from ourselves
+                    if (event.source !== window) return;
+
+                    if (event.data && event.data.type === 'scraper-result-event') {
+                        console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
+                        clearTimeout(timeout);
+                        window.removeEventListener('message', handleMessage);
+
+                        if (event.data.success) {
+                            resolve(event.data.result);
+                        } else {
+                            reject(new Error(event.data.error || "Unknown background error"));
+                        }
+                    }
+                };
+
+                window.addEventListener('message', handleMessage);
+
+                // Dispatch the event to trigger the content script via postMessage
+                console.log("[SCRAPER-DEBUG] Sending run-scraper-event via postMessage", {
+                    scraperName: scraperName.value,
+                    parameters: parameters.value.map(p => p.value)
+                });
+
+                window.postMessage({
+                    type: 'run-scraper-event',
+                    payload: {
+                        scraperName: scraperName.value,
+                        code: code.value,
+                        parameters: parameters.value.map(p => p.value)
+                    }
+                }, '*');
+            });
+
+            output.value = '';
+            const result = response;
 
             if (Array.isArray(result)) {
                 result.forEach((job: any) => {
@@ -182,19 +228,37 @@ const runScraper = async () => {
                 output.value = JSON.stringify(result, null, 2);
                 outputCount.value++;
             }
-        } else {
-            error.value = "Error: Please define an 'async function scrape()'";
+        } catch (e: any) {
+            error.value = `Execution Error: ${e.message}`;
+            output.value = "";
         }
-    } catch (e: any) {
-        console.error("Scraper Error Details:", e);
-        let msg = `Execution Error: ${e.message}`;
-        if (e.stack) {
-            msg += `\n\nStack Trace:\n${e.stack}`;
+    } else {
+        try {
+            const scraperLoader = new Function(`
+                    ${code.value}
+                    return typeof scrape !== 'undefined' ? scrape : null;
+                `);
+
+            const scrapeFunction = scraperLoader();
+
+            if (typeof scrapeFunction === 'function') {
+                const result = await scrapeFunction(...parameters.value.map(p => p.value));
+                output.value = JSON.stringify(result, null, 2);
+            } else {
+                output.value = "Error: Please define an 'async function scrape()'";
+            }
+        } catch (err: any) {
+            console.error("Execution Error:", err);
+
+            let msg = `Execution Error: ${err.message}`;
+            if (err.stack) {
+                msg += `\n\nStack Trace:\n${err.stack}`;
+            }
+
+            error.value = msg;
+
+            output.value = "";
         }
-        if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
-            msg += `\n\nPossible Cause: This is likely a CORS error. Ensure your CORS extension is enabled and configured for apis.indeed.com.`;
-        }
-        error.value = msg;
     }
 }
 </script>
@@ -276,6 +340,13 @@ const runScraper = async () => {
     justify-content: center;
     align-items: center;
     gap: 10px;
+}
+
+.run-in-background {
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+    align-items: center;
 }
 
 .code-area {

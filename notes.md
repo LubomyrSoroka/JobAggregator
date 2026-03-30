@@ -1,6 +1,5 @@
 # TODO
-- Use a full screen window for Editing a search.
-- The scrapers on the editing a search page should be dimmed if they are not enabled.
+- (Maybe this was a better idea... but instead I allowed the user to click the checkbox staright on the card) The scrapers on the editing a search page should be dimmed if they are not enabled.
 - GetJobMeta in ViewSearch.vue should be refactored. Should the APIs just return a meta key which is an array which displays what all the meta keys should be? There could be other approaches... 
 - Should there be a Job class?
 - The way the filters are saved in Search.vue is not ideal. It should be refactored.
@@ -8,7 +7,6 @@
 "if (type === 'week' || type === 'weekly') return baseVal.map(value => value * 52);
     if (type === 'month' || type === 'monthly') return baseVal.map(value => value * 12);"
 - Check if sortJobs is working while using the AI Enhancer.
-- Allow scrapers to yield arrays of jobs instead of a single job.
 - FilterJobWithAI should check if there is a job with the same description, to avoid reprocessing the same description. 
 - Should the height of each job card be the same? (Currently, I think this is only the case for cards on the same row)
 - May want to keep only one of salary or salary estimate for the meta items to preserve space.
@@ -23,14 +21,22 @@
 - Show a temporary message in the bottom right corner when you save something.
 - Should have "Run and Save" and "Run" buttons on the Edit Search page.
 - The blue highlight when selecting an input is slightly cut off on the Edit Search page.
-- Need to mention that scrapers should try to throw the errors otherwise viewsearch may have no way of knowing there was an error.
+- **Need to mention that scrapers should try to throw the errors otherwise viewsearch may have no way of knowing there was an error. i.e don't handle the error in the scraper.** 
 - If you try to switch between different cards for a stacked card while a scraper is processing, it will just take you back to the first card every time a new job is found.
 - The view-search page should display the name of the search.
 - When finding salaries with the LLM, for a range like "50 - 70 per hour", it should be displayed as $50.00 - $70.00 hourly. For some reason, it's replacing the - with a comma.
+- It doesn't recognize that the k at the end of a salary means thousand. e.g. 100k should be 100,000.
 - For finding years it still doesn't always give me the lower bound for the range. e.g for 2-3 years of experience it gives 3 instead of 2.
-- Could seriously consider forcing jobs to have an id. Would definitely simplify some of the logic
+- Could seriously consider forcing jobs to have an id. Would definitely simplify some of the logic.
+- Can only store 5mb in localstorage. Best way around this is to just make a backend. I've never seen a job description mention IndexedDb...
+- Allow users to run a search even if they are creating one (don't just show the save search button).
+- Bug: clicking save search when creating a new search would create duplicates if you click it more than once
+- Names are being cut off by the displaying the scraper being used for the job.
+- Allow grouping jobs by date.
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
 - In the stats tab, display salary info 
 - Add tooltips to the job cards to display the full job title and company name.
+- Use a full screen window for Editing a search.
+- Allow scrapers to yield arrays of jobs instead of a single job.
