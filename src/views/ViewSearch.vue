@@ -21,14 +21,14 @@
                                 'Card' : 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
-                                }} in total</div>
+                            }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                                }} Since Last
+                            }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                                }} </div>
+                            }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -129,6 +129,12 @@
                     <button class="close-error" @click="aiError = null">✕</button>
                 </div>
 
+                <div v-if="searchError" class="ai-error-banner">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-message">{{ searchError }}</span>
+                    <button class="close-error" @click="searchError = null">✕</button>
+                </div>
+
                 <div v-if="loading && jobs.length === 0" class="loading-state">
                     <div class="loader"></div>
                     <p>Processing results...</p>
@@ -209,7 +215,7 @@
                                             {{ Number(index) + 1 }} / {{ jobCard.length }}
                                         </span>
                                         <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                            }}</span>
+                                        }}</span>
                                     </div>
                                 </div>
                                 <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -307,6 +313,7 @@ const showAiModal = ref(false)
 const newJobCount = ref<number | null>(null)
 const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
+const searchError = ref<string | null>(null)
 
 const scrollToTop = () => {
     window.scrollTo({
@@ -510,23 +517,103 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
     const currentSearch = savedSearches.find(s => s.name === searchName)
     const oldJobs = localStorage.getItem(`jobs_${searchName}`) || '[]';
 
+    const getMaps = (scraperConfig: any): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any> } => {
+        const oldJobsMap = new Map<string, any>();
+        const oldJobsDescriptionMap = new Map<string, any>();
+        jobs.value.forEach((job: any) => {
+            let key = JSON.stringify(job);
+            if (job.id) {
+                key = JSON.stringify({ id: job.id, scraperSource: scraperConfig.scraperName });
+            } else {
+                key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+            }
+            oldJobsMap.set(key, job);
+            oldJobsDescriptionMap.set(JSON.stringify({ title: job.title, company: job.company, description: job.description }), job);
+        });
+        return { oldJobsMap, oldJobsDescriptionMap }
+    }
+    const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any) => {
+        if (!Array.isArray(job))
+            job = [job];
+        for (let j of job) {
+            j.scraperSource = scraperConfig.scraperName;
+            const isNewJob = getExisingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
+            if (isNewJob) {
+                j = await filterJobWithAI(j, currentSearch.filters);
+                jobs.value.push(j);
+            }
+        }
+    }
+
     if (viewSearch || !currentSearch) {
         jobs.value = JSON.parse(oldJobs);
         loading.value = false;
     }
     else {
         jobs.value = JSON.parse(oldJobs).map((job: any) => { job.fromLatestSearch = false; return job; });
-        currentSearch.scraperParameters
-            .filter(config => config.enabled)
-            .forEach(async (scraperConfig) => {
-                if (!scraperCache.has(scraperConfig.scraperName)) {
-                    scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
-                }
-                const scraperData = scraperCache.get(scraperConfig.scraperName);
-                const code = scraperData.code;
-                const parameters = scraperConfig.parameters.map(p => p.value);
+        for (const scraperConfig of currentSearch.scraperParameters.filter(config => config.enabled)) {
+            if (!scraperCache.has(scraperConfig.scraperName)) {
+                scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
+            }
+            const scraperData = scraperCache.get(scraperConfig.scraperName);
+            const code = scraperData.code;
+            const parameters = scraperConfig.parameters.map(p => p.value);
 
-                if (code) {
+            if (code) {
+                if (scraperData?.runInBackground) {
+                    try {
+                        await new Promise<void>((resolve, reject) => {
+                            let handleMessage: (event: MessageEvent) => void;
+
+                            const timeout = setTimeout(() => {
+                                window.removeEventListener('message', handleMessage);
+                                reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
+                            }, 60000);
+
+                            const { oldJobsMap, oldJobsDescriptionMap } = getMaps(scraperConfig);
+
+                            handleMessage = (event: MessageEvent) => {
+                                // We only accept messages from ourselves
+                                if (event.source !== window) return;
+
+                                if (event.data && event.data.type === 'scraper-result-event') {
+                                    console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
+
+                                    if (event.data.result) {
+                                        // Keep the timeout alive or clear it if we trust subsequent results
+                                        // For now, let's just clear it on the first result to show it's working
+                                        clearTimeout(timeout);
+                                        addJob(event.data.result, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch);
+                                    }
+                                    else {
+                                        window.removeEventListener('message', handleMessage);
+                                        clearTimeout(timeout);
+                                        if (event.data.done) {
+                                            resolve();
+                                        } else {
+                                            reject(new Error(event.data.error || "Unknown background error"));
+                                        }
+                                    }
+                                }
+                            };
+
+                            window.addEventListener('message', handleMessage);
+
+                            window.postMessage({
+                                type: 'run-scraper-event',
+                                payload: {
+                                    scraperName: scraperConfig.scraperName,
+                                    code: code,
+                                    parameters: parameters
+                                }
+                            }, '*');
+                        });
+
+                    } catch (e: any) {
+                        searchError.value = `Execution Error: ${e.message}`;
+                    }
+                }
+                else {
                     try {
                         const scraperFunction = new Function(`
                             ${code}
@@ -534,37 +621,38 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
                         `)();
 
                         if (typeof scraperFunction === 'function') {
-                            const oldJobsMap = new Map<string, any>();
+                            const { oldJobsMap, oldJobsDescriptionMap } = getMaps(scraperConfig);
 
-                            jobs.value.forEach((job: any) => {
-                                let key = JSON.stringify(job);
-                                if (job.id && job.scraperSource) {
-                                    key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
-                                } else {
-                                    key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
-                                }
-                                oldJobsMap.set(key, job);
-                            });
 
                             for await (let job of scraperFunction(...parameters)) {
-                                job = getExisingDataOneJob(job, oldJobsMap);
-                                if (job) {
-                                    job = await filterJobWithAI(job, currentSearch.filters);
-                                    jobs.value.push(job);
-                                }
+                                addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch);
                             }
-                            loading.value = false;
-                            localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value))
                         }
-                    } catch (e) {
+                    } catch (e: any) {
                         console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
+                        if (e instanceof TypeError && e.message.includes('NetworkError')) {
+                            searchError.value = `CORS Error: The scraper for ${scraperConfig.scraperName} was blocked by the website. Browser scrapers often require a CORS proxy.`;
+                        } else {
+                            searchError.value = `Error running scraper ${scraperConfig.scraperName}: ${e.message || e}`;
+                        }
                     }
                 }
-            });
+            }
+        }
+
+        try {
+            localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value));
+            console.log("Saved", jobs.value.length, "jobs to localStorage");
+        } catch (e: any) {
+            console.error("Failed to save jobs to localStorage:", e);
+            searchError.value = "Failed to save jobs: " + (e.message || 'Storage limit exceeded or invalid data.');
+        }
+        loading.value = false;
     }
 }
 
-const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
+// returns true if the job is new, false otherwise
+const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>) => {
     let key = null;
     let hasId = false;
     if (job.id && job.scraperSource) {
@@ -576,8 +664,8 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
 
     const oldJob = oldJobsMap.get(key);
     if (oldJob) {
-        // this is supposed to check whether the job is a repost. This would only work if the job doesn't have an id
-        if (!hasId && (Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted)) {
+        // this is supposed to check whether the job is a repost.
+        if (!hasId && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))) {
             oldJob.reposted = (oldJob.reposted || 0) + 1;
             repostCount.value++;
             oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
@@ -587,25 +675,27 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>) => {
             if (oldJob.reposted > 0)
                 repostCount.value++;
         }
-        return null;
+        return false;
 
     } else {
         if (hasId) {
             key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+            const oldJob = oldJobsDescriptionMap.get(key);
 
-            const oldJob = oldJobsMap.get(key);
-            if ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted)) {
+            if (oldJob && ((oldJob.id && oldJob.scraperSource === job.scraperSource && job.id !== oldJob.id) || (!oldJob.id && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))))) {
                 oldJob.reposted = (oldJob.reposted || 0) + 1;
                 repostCount.value++;
                 oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
                 oldJob.fromLatestSearch = true;
+                return false;
             }
-            return null;
 
         }
+        // why don't we check for the case that the job doesn't have an id and it's a repost?
+        // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
         job.fromLatestSearch = true;
         newJobCount.value = newJobCount.value ? newJobCount.value + 1 : 1;
-        return job;
+        return true;
     }
 }
 

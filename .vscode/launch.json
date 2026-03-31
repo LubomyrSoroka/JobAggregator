@@ -7,12 +7,12 @@
             "request": "attach",
             "name": "Attach to Firefox",
             "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}/JobHunter",
+            "webRoot": "${workspaceFolder}",
             "port": 6000,
             "pathMappings": [
                 {
                     "url": "http://localhost:5173",
-                    "path": "${workspaceFolder}/JobHunter"
+                    "path": "${workspaceFolder}"
                 }
             ],
             "preLaunchTask": "runTerminalCommand"
@@ -22,7 +22,7 @@
             "request": "launch",
             "name": "Launch Firefox",
             "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}/JobHunter",
+            "webRoot": "${workspaceFolder}",
             "firefoxArgs": [
                 "--start-debugger-server",
                 "6000",
@@ -31,7 +31,7 @@
             "pathMappings": [
                 {
                     "url": "http://localhost:5173",
-                    "path": "${workspaceFolder}/JobHunter"
+                    "path": "${workspaceFolder}"
                 }
             ]
         }

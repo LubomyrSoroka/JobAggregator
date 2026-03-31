@@ -7,7 +7,7 @@ import Profile from './components/Profile.vue'
   <div class="app-shell">
     <header class="app-header">
       <div class="header-content">
-        <div class="logo">JobHunter</div>
+        <div class="logo">JobAggregator</div>
         <Profile />
       </div>
     </header>
