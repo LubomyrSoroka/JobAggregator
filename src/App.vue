@@ -7,7 +7,11 @@ import Profile from './components/Profile.vue'
   <div class="app-shell">
     <header class="app-header">
       <div class="header-content">
-        <div class="logo">JobAggregator</div>
+        <div class="header-left">
+          <div class="logo">JobAggregator</div>
+          <RouterLink to="/search">Searches</RouterLink>
+          <RouterLink to="/">Scrapers</RouterLink>
+        </div>
         <Profile />
       </div>
     </header>
@@ -37,6 +41,13 @@ import Profile from './components/Profile.vue'
   align-items: center;
 }
 
+
+.header-left {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
 .header-content {
   width: 100%;
   max-width: 90%;
@@ -49,6 +60,19 @@ import Profile from './components/Profile.vue'
 .logo {
   font-size: 20px;
   font-weight: 700;
+  color: #3b82f6;
+  margin-right: 12px;
+}
+
+.header-left a {
+  text-decoration: none;
+  color: #475569;
+  font-weight: 500;
+  font-size: 15px;
+  transition: color 0.2s;
+}
+
+.header-left a:hover {
   color: #3b82f6;
 }
 

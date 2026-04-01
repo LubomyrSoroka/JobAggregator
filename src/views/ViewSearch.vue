@@ -273,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, reactive } from 'vue'
+import { ref, onMounted, computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
@@ -281,6 +281,7 @@ import JobStats from '../components/JobStats.vue'
 import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
 import { parseNumeric, calculateYearlySalary } from '@/components/salary'
+import { storage, getStorageObject, setStorageObject } from '../services/storageService'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
@@ -291,7 +292,11 @@ const jobs = ref<any[]>([])
 const loading = ref(true)
 const aiFiltering = ref(false)
 const selectedJob = ref<any>(null)
-const selectedJobLink = computed(() => getJobLink(selectedJob.value))
+const selectedJobLink = ref<string>('')
+
+watch(selectedJob, async (newVal) => {
+    selectedJobLink.value = await getJobLink(newVal)
+})
 
 const sortOptions = ref([
     'experience',
@@ -341,7 +346,7 @@ const runAI = async () => {
         sortJobs()
         const state = window.history.state
         if (state && state.searchName) {
-            localStorage.setItem(`jobs_${state.searchName}`, JSON.stringify(jobs.value))
+            await setStorageObject(`jobs_${state.searchName}`, jobs.value)
         }
     } finally {
         aiFiltering.value = false
@@ -513,9 +518,9 @@ const getJobMeta = (job: any) => {
 
 const executeSearch = async (searchName: string, viewSearch: boolean) => {
     loading.value = true
-    const savedSearches: SavedSearch[] = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
+    const savedSearches = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
     const currentSearch = savedSearches.find(s => s.name === searchName)
-    const oldJobs = localStorage.getItem(`jobs_${searchName}`) || '[]';
+    const oldJobs = (await storage.get(`jobs_${searchName}`)) || '[]';
 
     const getMaps = (scraperConfig: any): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any> } => {
         const oldJobsMap = new Map<string, any>();
@@ -553,7 +558,7 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         jobs.value = JSON.parse(oldJobs).map((job: any) => { job.fromLatestSearch = false; return job; });
         for (const scraperConfig of currentSearch.scraperParameters.filter(config => config.enabled)) {
             if (!scraperCache.has(scraperConfig.scraperName)) {
-                scraperCache.set(scraperConfig.scraperName, JSON.parse(localStorage.getItem(scraperConfig.scraperName) || '{}'))
+                scraperCache.set(scraperConfig.scraperName, await getStorageObject<any>(scraperConfig.scraperName, {}))
             }
             const scraperData = scraperCache.get(scraperConfig.scraperName);
             const code = scraperData.code;
@@ -641,10 +646,10 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         }
 
         try {
-            localStorage.setItem(`jobs_${searchName}`, JSON.stringify(jobs.value));
-            console.log("Saved", jobs.value.length, "jobs to localStorage");
+            await setStorageObject(`jobs_${searchName}`, jobs.value);
+            console.log("Saved", jobs.value.length, "jobs to storage");
         } catch (e: any) {
-            console.error("Failed to save jobs to localStorage:", e);
+            console.error("Failed to save jobs to storage:", e);
             searchError.value = "Failed to save jobs: " + (e.message || 'Storage limit exceeded or invalid data.');
         }
         loading.value = false;
@@ -731,9 +736,9 @@ const getDuplicates = (jobList: any[]) => {
 }
 
 const filterJobsWithAI = async (jobList: any[], filters: any) => {
-    const openaiApiKey = localStorage.getItem('openai_api_key') || ''
-    const endPoint = localStorage.getItem('end_point') || ''
-    const model = localStorage.getItem('model') || ''
+    const openaiApiKey = (await storage.get('openai_api_key')) || ''
+    const endPoint = (await storage.get('end_point')) || ''
+    const model = (await storage.get('model')) || ''
     amountFiltered.value = 0;
     if (!openaiApiKey || !endPoint) {
         console.warn("API key or Endpoint missing for AI filtering");
@@ -829,9 +834,9 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     await Promise.all(aiPromises);
 }
 const filterJobWithAI = async (job: any, filters: Filter[]) => {
-    const openaiApiKey = localStorage.getItem('openai_api_key') || ''
-    const endPoint = localStorage.getItem('end_point') || ''
-    const model = localStorage.getItem('model') || ''
+    const openaiApiKey = (await storage.get('openai_api_key')) || ''
+    const endPoint = (await storage.get('end_point')) || ''
+    const model = (await storage.get('model')) || ''
     try {
         let localizedPrompt = 'From the job title and description, determine the following and answer in JSON format:';
         let number = 1;
@@ -895,10 +900,10 @@ const filterJobWithAI = async (job: any, filters: Filter[]) => {
     }
 }
 
-const getJobLink = (job: any) => {
+const getJobLink = async (job: any) => {
     if (!job || !job.scraperSource || !job.id) return ''
     if (!scraperCache.has(job.scraperSource)) {
-        scraperCache.set(job.scraperSource, JSON.parse(localStorage.getItem(job.scraperSource) || '{}'))
+        scraperCache.set(job.scraperSource, await getStorageObject<any>(job.scraperSource, {}))
     }
     const scraperData = scraperCache.get(job.scraperSource)
     let url = scraperData?.jobLinkTemplate?.replace('{id}', job.id) || ''

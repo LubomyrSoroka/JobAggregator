@@ -20,13 +20,14 @@
 import { ref, onMounted } from 'vue'
 import { SavedSearch } from '../models'
 import router from '@/router';
+import { getStorageObject } from '../services/storageService'
 
 const savedSearches = ref<SavedSearch[]>([]);
 const scraperNames = ref<string[]>([]);
 
-onMounted(() => {
-    scraperNames.value = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
-    savedSearches.value = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
+onMounted(async () => {
+    scraperNames.value = await getStorageObject<string[]>('my_scraper_data', [])
+    savedSearches.value = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
 })
 
 </script>

@@ -85,6 +85,7 @@ import { ScraperParameter, SavedSearch, ScraperConfig } from '../models'
 import router from '@/router';
 import AIFilters from '../components/AIFilters.vue'
 import Filter, { filters as defaultFilters } from '../components/Filter.ts'
+import { getStorageObject, setStorageObject } from '../services/storageService'
 
 const showConfirmDelete = ref(false);
 const savedSearches = ref<SavedSearch[]>([]);
@@ -99,9 +100,9 @@ const activeTab = ref('scrapers');
 const searchFilters = ref<Filter[]>(defaultFilters);
 const currentSearch = ref<SavedSearch | null>(null); // does this need to be a ref?
 
-onMounted(() => {
-    scraperNames.value = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
-    savedSearches.value = JSON.parse(localStorage.getItem('my_saved_searches') || '[]')
+onMounted(async () => {
+    scraperNames.value = await getStorageObject<string[]>('my_scraper_data', [])
+    savedSearches.value = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
     const state = window.history.state;
 
     if (state && state.searchName) {
@@ -113,14 +114,15 @@ onMounted(() => {
     }
 })
 
-const enableScraper = (scraperName: string) => {
+const enableScraper = async (scraperName: string) => {
     const config = tempConfigs.value.find(c => c.scraperName === scraperName)
     if (config) {
         config.enabled = true;
     }
     else {
         let mappedParams = [];
-        const defaultParams = JSON.parse(localStorage.getItem(`${scraperName}`) || '{}').parameters || [];
+        const scraperData = await getStorageObject<any>(scraperName, {});
+        const defaultParams = scraperData.parameters || [];
         if (currentSearch.value && currentSearch.value.scraperParameters) {
             const savedConfig = currentSearch.value.scraperParameters.find(c => c.scraperName === scraperName);
             if (savedConfig) {
@@ -181,7 +183,7 @@ const commitCurrentScraperConfig = () => {
     }
 }
 
-const openSearchParams = (scraperName: string) => {
+const openSearchParams = async (scraperName: string) => {
     commitCurrentScraperConfig();
     currentScraper.value = scraperName;
     const config = tempConfigs.value.find(c => c.scraperName === scraperName);
@@ -192,7 +194,8 @@ const openSearchParams = (scraperName: string) => {
     }
     // Check if this scraper is already in the search being edited
     //const existingSearch = savedSearches.value.find(s => s.name === searchName.value);
-    const defaultParams = JSON.parse(localStorage.getItem(`${scraperName}`) || '{}').parameters || [];
+    const scraperData = await getStorageObject<any>(scraperName, {});
+    const defaultParams = scraperData.parameters || [];
 
     if (currentSearch.value && currentSearch.value.scraperParameters) {
         const savedConfig = currentSearch.value.scraperParameters.find(c => c.scraperName === scraperName);
@@ -211,7 +214,7 @@ const openSearchParams = (scraperName: string) => {
     enabled.value[scraperName] = false;
 }
 
-const saveSearch = () => {
+const saveSearch = async () => {
     if (!searchName.value) return;
     commitCurrentScraperConfig();
     let search = savedSearches.value.find(s => s.name === originalName.value);
@@ -226,22 +229,22 @@ const saveSearch = () => {
         savedSearches.value.push(search);
     }
 
-    localStorage.setItem('my_saved_searches', JSON.stringify(savedSearches.value))
+    await setStorageObject('my_saved_searches', savedSearches.value)
     //closeSearchWindow();
 }
 
-const deleteSearch = () => {
+const deleteSearch = async () => {
     if (!originalName.value) return;
     let search = savedSearches.value.find(s => s.name === originalName.value);
     if (search) {
         savedSearches.value = savedSearches.value.filter(s => s.name !== originalName.value);
-        localStorage.setItem('my_saved_searches', JSON.stringify(savedSearches.value))
+        await setStorageObject('my_saved_searches', savedSearches.value)
         router.push('/search');
     }
 }
 
-const runSearch = (viewSearch: boolean = false) => {
-    saveSearch();
+const runSearch = async (viewSearch: boolean = false) => {
+    await saveSearch();
     router.push({
         name: 'ViewSearch',
         state: { searchName: searchName.value, viewSearch }

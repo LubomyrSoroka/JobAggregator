@@ -23,24 +23,25 @@
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
+import { storage } from '../services/storageService'
 
 const openaiApiKey = ref('')
 const endPoint = ref('')
 const model = ref('')
 
-onMounted(() => {
-    openaiApiKey.value = localStorage.getItem('openai_api_key') || ''
-    endPoint.value = localStorage.getItem('end_point') || ''
-    model.value = localStorage.getItem('model') || ''
+onMounted(async () => {
+    openaiApiKey.value = (await storage.get('openai_api_key')) || ''
+    endPoint.value = (await storage.get('end_point')) || ''
+    model.value = (await storage.get('model')) || ''
 })
-const saveOpenAIKey = () => {
-    localStorage.setItem('openai_api_key', openaiApiKey.value)
+const saveOpenAIKey = async () => {
+    await storage.set('openai_api_key', openaiApiKey.value)
 }
-const saveEndPoint = () => {
-    localStorage.setItem('end_point', endPoint.value)
+const saveEndPoint = async () => {
+    await storage.set('end_point', endPoint.value)
 }
-const saveModel = () => {
-    localStorage.setItem('model', model.value)
+const saveModel = async () => {
+    await storage.set('model', model.value)
 }
 </script>
 

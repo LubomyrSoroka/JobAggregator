@@ -53,6 +53,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
+import { storage, getStorageObject, setStorageObject } from '../services/storageService'
 const code = ref('');
 const scraperName = ref('');
 const error = ref('');
@@ -68,14 +69,14 @@ let originalJobLinkTemplateValue: string | undefined = undefined;
 let originalRunInBackgroundValue: boolean | undefined = undefined;
 const runInBackground = ref(false);
 
-onMounted(() => {
+onMounted(async () => {
     const urlParams = new URLSearchParams(window.location.search)
     scraperName.value = urlParams.get('scraper-name') || ''
     originalName = scraperName.value;
     if (scraperName.value) {
-        const data = JSON.parse(localStorage.getItem(scraperName.value) || '{}')
+        const data = await getStorageObject<any>(scraperName.value, {})
         code.value = data.code || ''
-        parameters.value = JSON.parse(localStorage.getItem(`${scraperName.value}_run_args`) || '[]')
+        parameters.value = await getStorageObject<ScraperParameter[]>(`${scraperName.value}_run_args`, [])
         jobLinkTemplate.value = data.jobLinkTemplate || ''
         runInBackground.value = data.runInBackground || false
     }
@@ -107,40 +108,40 @@ onBeforeRouteLeave((to, from, next) => {
     next();
 })
 
-const deleteScraper = () => {
-    localStorage.removeItem(scraperName.value);
-    let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
+const deleteScraper = async () => {
+    await storage.remove(scraperName.value);
+    let myScrapers = await getStorageObject<string[]>('my_scraper_data', [])
     myScrapers = myScrapers.filter((scraper: string) => scraper !== scraperName.value)
-    localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers))
+    await setStorageObject('my_scraper_data', myScrapers)
 }
 
-const saveScraper = () => {
+const saveScraper = async () => {
     if (!scraperName.value) {
         error.value = 'Please enter a scraper name'
         return
     }
     if (originalName && originalName !== scraperName.value) {
-        localStorage.removeItem(originalName);
-        localStorage.removeItem(`${originalName}_run_args`);
-        localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
-        let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]');
+        await storage.remove(originalName);
+        await storage.remove(`${originalName}_run_args`);
+        await setStorageObject(`${scraperName.value}_run_args`, parameters.value);
+        let myScrapers = await getStorageObject<string[]>('my_scraper_data', []);
         myScrapers = myScrapers.map((scraper: string) => {
             if (scraper === originalName) {
                 return scraperName.value;
             }
             return scraper;
         });
-        localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers));
+        await setStorageObject('my_scraper_data', myScrapers);
     }
     originalName = scraperName.value;
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
-    localStorage.setItem(scraperName.value, JSON.stringify({ code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames(), runInBackground: runInBackground.value }))
-    let myScrapers = JSON.parse(localStorage.getItem('my_scraper_data') || '[]')
+    await setStorageObject(scraperName.value, { code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames(), runInBackground: runInBackground.value })
+    let myScrapers = await getStorageObject<string[]>('my_scraper_data', [])
     if (!myScrapers.includes(scraperName.value)) {
         myScrapers.push(scraperName.value)
-        localStorage.setItem('my_scraper_data', JSON.stringify(myScrapers))
+        await setStorageObject('my_scraper_data', myScrapers)
     }
 }
 const getParameterNames = () => {
@@ -167,7 +168,7 @@ const runScraper = async (inBackground: boolean = false) => {
     output.value = '';
     error.value = '';
 
-    localStorage.setItem(`${scraperName.value}_run_args`, JSON.stringify(parameters.value));
+    await setStorageObject(`${scraperName.value}_run_args`, parameters.value);
 
     if (inBackground) {
         runMenu.value = false;
@@ -175,7 +176,7 @@ const runScraper = async (inBackground: boolean = false) => {
         output.value = "Running scraper in background extension...";
 
         try {
-            const response: any = await new Promise((resolve, reject) => {
+            await new Promise<void>((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     window.removeEventListener('message', handleMessage);
                     reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
@@ -190,10 +191,21 @@ const runScraper = async (inBackground: boolean = false) => {
                         clearTimeout(timeout);
                         window.removeEventListener('message', handleMessage);
 
-                        if (event.data.success) {
-                            resolve(event.data.result);
-                        } else {
-                            reject(new Error(event.data.error || "Unknown background error"));
+                        if (event.data.result) {
+                            // Keep the timeout alive or clear it if we trust subsequent results
+                            // For now, let's just clear it on the first result to show it's working
+                            clearTimeout(timeout);
+                            output.value += JSON.stringify(event.data.result, null, 2) + '\n';
+                            outputCount.value++;
+                        }
+                        else {
+                            window.removeEventListener('message', handleMessage);
+                            clearTimeout(timeout);
+                            if (event.data.done) {
+                                resolve();
+                            } else {
+                                reject(new Error(event.data.error || "Unknown background error"));
+                            }
                         }
                     }
                 };
@@ -216,18 +228,18 @@ const runScraper = async (inBackground: boolean = false) => {
                 }, '*');
             });
 
-            output.value = '';
-            const result = response;
+            // output.value = '';
+            // const result = response;
 
-            if (Array.isArray(result)) {
-                result.forEach((job: any) => {
-                    output.value += JSON.stringify(job, null, 2) + '\n';
-                    outputCount.value++;
-                });
-            } else if (result) {
-                output.value = JSON.stringify(result, null, 2);
-                outputCount.value++;
-            }
+            // if (Array.isArray(result)) {
+            //     result.forEach((job: any) => {
+            //         output.value += JSON.stringify(job, null, 2) + '\n';
+            //         outputCount.value++;
+            //     });
+            // } else if (result) {
+            //     output.value = JSON.stringify(result, null, 2);
+            //     outputCount.value++;
+            // }
         } catch (e: any) {
             error.value = `Execution Error: ${e.message}`;
             output.value = "";
@@ -242,8 +254,10 @@ const runScraper = async (inBackground: boolean = false) => {
             const scrapeFunction = scraperLoader();
 
             if (typeof scrapeFunction === 'function') {
-                const result = await scrapeFunction(...parameters.value.map(p => p.value));
-                output.value = JSON.stringify(result, null, 2);
+                for await (const job of scrapeFunction(...parameters.value.map(p => p.value))) {
+                    output.value += JSON.stringify(job, null, 2) + '\n';
+                    outputCount.value++;
+                }
             } else {
                 output.value = "Error: Please define an 'async function scrape()'";
             }
