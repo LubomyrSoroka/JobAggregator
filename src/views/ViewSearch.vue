@@ -88,7 +88,15 @@
                                 <button @click="showAiModal = true" class="ai-trigger-button">
                                     AI Enhancer
                                 </button>
+                                <button @click="runNLP" class="ai-trigger-button">
+                                    Run NLP
+                                </button>
                             </div>
+                        </div>
+                        <div class="download">
+                            <button @click="downloadJobs" class="download-button">
+                                Download JSON
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -290,6 +298,7 @@ import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
 import { parseNumeric, calculateYearlySalary } from '@/components/salary'
 import { storage, getStorageObject, setStorageObject } from '../services/storageService'
+import { getExperienceNLP } from '../scripts/GetExperienceNLP'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
@@ -359,6 +368,27 @@ const runAI = async () => {
     } finally {
         aiFiltering.value = false
     }
+}
+
+const runNLP = async () => {
+    jobs.value.forEach(job => {
+        const nlpResult = getExperienceNLP(job.description)
+        if (nlpResult.text) {
+            job.description = nlpResult.text
+        }
+        if (nlpResult["years of experience"] !== null) {
+            job.yearsOfExperience = nlpResult["years of experience"]
+            job.foundThroughAI ? job.foundThroughAI.push('yearsOfExperience') : job.foundThroughAI = ['yearsOfExperience']
+        }
+        if (!job.salaryRange && nlpResult["salary range"] !== null) {
+            job.salaryRange = nlpResult["salary range"]
+            job.foundThroughAI ? job.foundThroughAI.push('salaryRange') : job.foundThroughAI = ['salaryRange']
+        }
+        if (!job.salaryType && nlpResult["salary type"] !== null) {
+            job.salaryType = nlpResult["salary type"]
+            job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
+        }
+    })
 }
 
 // couldn't I just make this a normal variable in compute it in displayedJobs?
@@ -565,6 +595,16 @@ const getJobMeta = (job: any) => {
     }
 
     return meta;
+}
+
+const downloadJobs = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jobs.value, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "jobs.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
 }
 
 const executeSearch = async (searchName: string, viewSearch: boolean) => {
@@ -967,6 +1007,7 @@ onMounted(async () => {
     try {
         const state = window.history.state
         if (state?.searchName) {
+            document.title = `Search ${state.searchName}`
             await executeSearch(state.searchName, state?.viewSearch)
         } else {
             loading.value = false

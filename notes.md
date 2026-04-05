@@ -21,18 +21,17 @@
 - Show a temporary message in the bottom right corner when you save something.
 - Should have "Run and Save" and "Run" buttons on the Edit Search page.
 - The blue highlight when selecting an input is slightly cut off on the Edit Search page.
-- **Need to mention that scrapers should try to throw the errors otherwise viewsearch may have no way of knowing there was an error. i.e don't handle the error in the scraper.** 
+- **Need to mention that scrapers should try to throw the errors otherwise viewsearch may have no way of knowing there was an error. i.e. don't handle the error in the scraper.** 
 - If you try to switch between different cards for a stacked card while a scraper is processing, it will just take you back to the first card every time a new job is found.
 - The view-search page should display the name of the search.
 - When finding salaries with the LLM, for a range like "50 - 70 per hour", it should be displayed as $50.00 - $70.00 hourly. For some reason, it's replacing the - with a comma.
 - It doesn't recognize that the k at the end of a salary means thousand. e.g. 100k should be 100,000.
 - For finding years it still doesn't always give me the lower bound for the range. e.g for 2-3 years of experience it gives 3 instead of 2.
 - Could seriously consider forcing jobs to have an id. Would definitely simplify some of the logic.
-- Can only store 5mb in localstorage. Best way around this is to just make a backend. I've never seen a job description mention IndexedDb...
 - Allow users to run a search even if they are creating one (don't just show the save search button).
 - Bug: clicking save search when creating a new search would create duplicates if you click it more than once
 - Names are being cut off by the displaying the scraper being used for the job.
-- Allow grouping jobs by date.
+
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
@@ -40,3 +39,5 @@
 - Add tooltips to the job cards to display the full job title and company name.
 - Use a full screen window for Editing a search.
 - Allow scrapers to yield arrays of jobs instead of a single job.
+- Allow grouping jobs by date.
+- Can only store 5mb in localstorage. Best way around this is to just make a backend. I've never seen a job description mention IndexedDb...
