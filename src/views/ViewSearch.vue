@@ -16,9 +16,8 @@
                     <div class="panel-main">
                         <div class="results-info">
                             <span class="results-label">Search Results</span>
-                            <div class="results-badge">{{ displayedJobs.length }} {{ 'Job ' + (displayedJobs.length ===
-                                1 ?
-                                'Card' : 'Cards') }} Displayed</div>
+                            <div class="results-badge">{{ jobCardCount }} {{ 'Job ' + (jobCardCount === 1 ? 'Card' :
+                                'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
                             }} in total</div>
@@ -197,65 +196,74 @@
                 </div>
 
                 <!-- Main Grid remains visible -->
-                <div v-if="displayedJobs.length > 0" class="job-grid">
-                    <div v-for="(jobCard, jobCardIndex) in displayedJobs" :key="jobCard[0]?.url || jobCardIndex"
-                        :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
+                <div v-if="displayedJobs.length > 0" class="job-grid-section">
+                    <div v-for="(jobs, dateIndex) in displayedJobs" :key="dateIndex" class="job-group">
+                        <h3 class="job-group-title">{{ formatDate(jobs[0]) }}</h3>
+                        <div class="job-grid">
+                            <div v-for="(jobCard, jobCardIndex) in jobs[1]" :key="jobCard[0]?.url || jobCardIndex"
+                                :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
 
-                        <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
-                            @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
-                            <div v-if="job.image" class="job-image">
-                                <img :src="job.image" :alt="job.company">
-                            </div>
-                            <div class="job-header" :class="{ 'with-image': job.image }">
-                                <div class="job-title-row">
-                                    <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle || `Untitled
-                                        Position` }}</h3>
-                                    <div class="badges-row">
-                                        <span v-if="jobCard.length > 1" class="version-badge">
-                                            {{ Number(index) + 1 }} / {{ jobCard.length }}
-                                        </span>
-                                        <span v-if="job.scraperSource" class="scraper-badge">{{ job.scraperSource
-                                        }}</span>
+                                <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
+                                    @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
+                                    <div v-if="job.image" class="job-image">
+                                        <img :src="job.image" :alt="job.company">
                                     </div>
-                                </div>
-                                <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
-                                    class="job-full-company" @click.stop>{{
-                                        job.company }}</a>
-                                <div v-else :title="job.company" class="job-full-company">{{ job.company }}</div>
-                            </div>
+                                    <div class="job-header" :class="{ 'with-image': job.image }">
+                                        <div class="job-title-row">
+                                            <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle ||
+                                                `Untitled
+                                                Position` }}</h3>
+                                            <div class="badges-row">
+                                                <span v-if="jobCard.length > 1" class="version-badge">
+                                                    {{ Number(index) + 1 }} / {{ jobCard.length }}
+                                                </span>
+                                                <span v-if="job.scraperSource" class="scraper-badge">{{
+                                                    job.scraperSource
+                                                    }}</span>
+                                            </div>
+                                        </div>
+                                        <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
+                                            class="job-full-company" @click.stop>{{
+                                                job.company }}</a>
+                                        <div v-else :title="job.company" class="job-full-company">{{ job.company }}
+                                        </div>
+                                    </div>
 
-                            <div class="job-meta">
-                                <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
-                                    :class="['meta-item', { 'found-through-ai': meta.isAi }]">
-                                    {{ meta.value }}
-                                </div>
-                            </div>
+                                    <div class="job-meta">
+                                        <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
+                                            :class="['meta-item', { 'found-through-ai': meta.isAi }]">
+                                            {{ meta.value }}
+                                        </div>
+                                    </div>
 
-                            <div v-if="job.requirementsSummary" class="job-description">
-                                {{ job.requirementsSummary }}
-                            </div>
-                            <div v-else-if="job.description" class="job-description" v-html="job.description"></div>
+                                    <div v-if="job.requirementsSummary" class="job-description">
+                                        {{ job.requirementsSummary }}
+                                    </div>
+                                    <div v-else-if="job.description" class="job-description" v-html="job.description">
+                                    </div>
 
-                            <div class="job-footer">
-                                <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
-                                    Save
-                                </button>
-                                <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
-                                    Unsave
-                                </button>
-                                <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url" target="_blank"
-                                    class="apply-button" @click.stop>
-                                    Apply Now
-                                </a>
-                            </div>
-                            <div v-if="jobCard.length > 1" class="navigation-controls">
-                                <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
-                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
-                                    <ChevronRight :size="20" />
-                                </div>
-                                <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
-                                    @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
-                                    <ChevronLeft :size="20" />
+                                    <div class="job-footer">
+                                        <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                            Save
+                                        </button>
+                                        <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                            Unsave
+                                        </button>
+                                        <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url"
+                                            target="_blank" class="apply-button" @click.stop>
+                                            Apply Now
+                                        </a>
+                                    </div>
+                                    <div v-if="jobCard.length > 1" class="navigation-controls">
+                                        <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
+                                            @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
+                                            <ChevronRight :size="20" />
+                                        </div>
+                                        <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
+                                            @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
+                                            <ChevronLeft :size="20" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -343,7 +351,7 @@ const runAI = async () => {
     aiFiltering.value = true
     try {
         await filterJobsWithAI(jobs.value, aiFilters.value)
-        sortJobs()
+        // sortJobs() is called in displayedJobs
         const state = window.history.state
         if (state && state.searchName) {
             await setStorageObject(`jobs_${state.searchName}`, jobs.value)
@@ -353,7 +361,14 @@ const runAI = async () => {
     }
 }
 
+// couldn't I just make this a normal variable in compute it in displayedJobs?
+const jobCardCount = computed(() => {
+    return displayedJobs.value.reduce((acc, jobGroup) => acc + jobGroup[1].length, 0)
+})
+
 const displayedJobs = computed(() => {
+    // you should only need to sort the jobs that are not getting filtered so isn't this inefficient?
+    sortJobs();
     let filteredJobs = jobs.value;
     if (savedOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.saved)
@@ -367,10 +382,46 @@ const displayedJobs = computed(() => {
     if (relevantOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
     }
-    return getDuplicates(filteredJobs)
+    filteredJobs = getDuplicates(filteredJobs)
+    const jobGroups = groupJobs(filteredJobs)
+    // Object.keys(jobGroups).forEach(key => {
+    //     // if (jobGroups[key]!.length > 1) {
+    //     //     sortJobs(jobGroups[key]!)
+    //     // }
+    // })
+    const jobGroupArray = Object.entries(jobGroups).sort((a, b) => b[0].localeCompare(a[0]))
+
+    return jobGroupArray;
 })
 
+const groupJobs = (filteredJobs: any[]) => {
+    // why don't I use Date type...
+    const jobGroups: Record<string, any[]> = {};
+    filteredJobs.forEach(job => {
+        const datePosted = job.reduce((min: string, j: any) =>
+            j.datePosted < min ? j.datePosted : min,
+            '9999-12-31'
+        );
+        if (jobGroups[datePosted]) {
+            jobGroups[datePosted]!.push(job);
+        } else {
+            jobGroups[datePosted] = [job];
+        }
+    });
+    return jobGroups;
+}
 
+
+const formatDate = (dateStr: string) => {
+    if (!dateStr || dateStr === '9999-12-31') return 'Unknown Date';
+    try {
+        const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00');
+        if (isNaN(date.getTime())) return dateStr;
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch {
+        return dateStr;
+    }
+}
 
 const formatMoney = (val: number) => {
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1330,6 +1381,27 @@ onMounted(async () => {
     font-size: 16px;
     color: #64748b;
     font-weight: 500;
+}
+
+.job-grid-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.job-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.job-group-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary, #333);
+    margin: 0;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .job-grid {
