@@ -289,7 +289,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, reactive, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
@@ -349,10 +349,12 @@ const irrelevantCount = computed(() => {
 
 const saveJob = (job: any) => {
     job.saved = true
+    saveJobs(window.history.state.searchName)
 }
 
 const unsaveJob = (job: any) => {
     job.saved = false
+    saveJobs(window.history.state.searchName)
 }
 
 const runAI = async () => {
@@ -361,10 +363,7 @@ const runAI = async () => {
     try {
         await filterJobsWithAI(jobs.value, aiFilters.value)
         // sortJobs() is called in displayedJobs
-        const state = window.history.state
-        if (state && state.searchName) {
-            await setStorageObject(`jobs_${state.searchName}`, jobs.value)
-        }
+        await saveJobs(window.history.state.searchName)
     } finally {
         aiFiltering.value = false
     }
@@ -389,6 +388,7 @@ const runNLP = async () => {
             job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
         }
     })
+    saveJobs(window.history.state.searchName);
 }
 
 // couldn't I just make this a normal variable in compute it in displayedJobs?
@@ -736,14 +736,18 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
             }
         }
 
-        try {
-            await setStorageObject(`jobs_${searchName}`, jobs.value);
-            console.log("Saved", jobs.value.length, "jobs to storage");
-        } catch (e: any) {
-            console.error("Failed to save jobs to storage:", e);
-            searchError.value = "Failed to save jobs: " + (e.message || 'Storage limit exceeded or invalid data.');
-        }
+        saveJobs(searchName);
         loading.value = false;
+    }
+}
+
+const saveJobs = async (searchName: string) => {
+    try {
+        await setStorageObject(`jobs_${searchName}`, jobs.value);
+        console.log("Saved", jobs.value.length, "jobs to storage");
+    } catch (e: any) {
+        console.error("Failed to save jobs to storage:", e);
+        searchError.value = "Failed to save jobs: " + (e.message || 'Storage limit exceeded or invalid data.');
     }
 }
 
@@ -1024,6 +1028,7 @@ onMounted(async () => {
         loading.value = false
     }
 })
+
 </script>
 
 <style scoped>

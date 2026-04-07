@@ -11,8 +11,7 @@ export function getExperienceNLP(text: string): { "years of experience": number 
     }
     const numOrWord = `\\d+(?:\\.\\d+)?|${Object.keys(wordToNum).join('|')}`
     const dashes = [
-        '-',
-        '\\\\u2012', '\\\\u2013', '\\\\u2014', '\\\\u2015', '\\\\u2212',
+        '-', '—', '–', '−', '‒', '―',
         '&mdash;?', '&ndash;?', '&minus;?',
         '&#8210;?', '&#8211;?', '&#8212;?', '&#8213;?', '&#8722;?', '&#45;?',
         '&#x2012;?', '&#x2013;?', '&#x2014;?', '&#x2015;?', '&#x2212;?'
@@ -25,7 +24,7 @@ export function getExperienceNLP(text: string): { "years of experience": number 
         if (match[1]) {
             const valStr = match[1].toLowerCase()
             const valNum = wordToNum[valStr] !== undefined ? wordToNum[valStr] : parseInt(valStr, 10)
-            if (valNum <= 20) {
+            if (valNum < 20) {
                 maxYears = Math.max(maxYears, valNum)
             }
         }
