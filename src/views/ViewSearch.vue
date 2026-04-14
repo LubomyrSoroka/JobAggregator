@@ -1,5 +1,5 @@
 <template>
-    <div class="view-content-centered">
+    <div class="view-content-centered" ref="scrollContainer">
         <div class="view-search-container">
             <header class="view-header">
                 <div class="back-button" @click="$router.push('/search')">
@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
-                            }} in total</div>
+                                }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
+                                }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
+                                }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -227,7 +227,7 @@
                                                 </span>
                                                 <span v-if="job.scraperSource" class="scraper-badge">{{
                                                     job.scraperSource
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -291,18 +291,19 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { SavedSearch, ScraperConfig, ScraperParameter } from '../models'
+import { SavedSearch, ScraperConfig } from '../models'
+import type { ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
 import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
 import { parseNumeric, calculateYearlySalary } from '@/components/salary'
-import { storage, getStorageObject, setStorageObject } from '../services/storageService'
+import { getStorageObject, updateStorageObject, getAllStorageObjects } from '../services/storageService'
 import { getExperienceNLP } from '../scripts/GetExperienceNLP'
+import { MY_SEARCHES, MY_SCRAPERS, JOBS, OPENAI_API_CONFIG } from '../services/storeNames'
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
-const scraperCache = new Map<string, any>()
 
 const route = useRoute()
 const jobs = ref<any[]>([])
@@ -332,16 +333,22 @@ const noReposts = ref(true)
 const relevantOnly = ref(true);
 const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
-const newJobCount = ref<number | null>(null)
+const newJobCount = ref<number>(0)
 const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
+const scrollContainer = ref<HTMLElement | null>(null)
 const searchError = ref<string | null>(null)
+const scraperLinkTemplates = ref<Record<string, string>>({})
+const scraperIdToName: Record<number, string> = {}
+let searchId: number;
 
 const scrollToTop = () => {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    })
+    if (scrollContainer.value) {
+        scrollContainer.value.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        })
+    }
 }
 const irrelevantCount = computed(() => {
     return jobs.value.filter(job => !(job.isRelevantJob ?? true)).length
@@ -349,12 +356,12 @@ const irrelevantCount = computed(() => {
 
 const saveJob = (job: any) => {
     job.saved = true
-    saveJobs(window.history.state.searchName)
+    saveJobs(searchId)
 }
 
 const unsaveJob = (job: any) => {
     job.saved = false
-    saveJobs(window.history.state.searchName)
+    saveJobs(searchId)
 }
 
 const runAI = async () => {
@@ -371,25 +378,30 @@ const runAI = async () => {
 
 const runNLP = async () => {
     jobs.value.forEach(job => {
-        const nlpResult = getExperienceNLP(job.description)
-        if (nlpResult.text) {
-            job.description = nlpResult.text
-        }
-        if (nlpResult["years of experience"] !== null) {
-            job.yearsOfExperience = nlpResult["years of experience"]
-            job.foundThroughAI ? job.foundThroughAI.push('yearsOfExperience') : job.foundThroughAI = ['yearsOfExperience']
-        }
-        if (!job.salaryRange && nlpResult["salary range"] !== null) {
-            job.salaryRange = nlpResult["salary range"]
-            job.foundThroughAI ? job.foundThroughAI.push('salaryRange') : job.foundThroughAI = ['salaryRange']
-        }
-        if (!job.salaryType && nlpResult["salary type"] !== null) {
-            job.salaryType = nlpResult["salary type"]
-            job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
-        }
+        runNLPOneJob(job)
     })
     saveJobs(window.history.state.searchName);
 }
+
+const runNLPOneJob = async (job: any) => {
+    const nlpResult = getExperienceNLP(job.description)
+    if (nlpResult.text) {
+        job.description = nlpResult.text
+    }
+    if (nlpResult["years of experience"] !== null) {
+        job.yearsOfExperience = nlpResult["years of experience"]
+        job.foundThroughAI ? job.foundThroughAI.push('yearsOfExperience') : job.foundThroughAI = ['yearsOfExperience']
+    }
+    if (!job.salaryRange && nlpResult["salary range"] !== null) {
+        job.salaryRange = nlpResult["salary range"]
+        job.foundThroughAI ? job.foundThroughAI.push('salaryRange') : job.foundThroughAI = ['salaryRange']
+    }
+    if (!job.salaryType && nlpResult["salary type"] !== null) {
+        job.salaryType = nlpResult["salary type"]
+        job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
+    }
+}
+
 
 // couldn't I just make this a normal variable in compute it in displayedJobs?
 const jobCardCount = computed(() => {
@@ -607,11 +619,9 @@ const downloadJobs = () => {
     downloadAnchorNode.remove();
 }
 
-const executeSearch = async (searchName: string, viewSearch: boolean) => {
+const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
     loading.value = true
-    const savedSearches = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
-    const currentSearch = savedSearches.find(s => s.name === searchName)
-    const oldJobs = (await storage.get(`jobs_${searchName}`)) || '[]';
+    const oldJobs = (await getStorageObject(JOBS, currentSearch.id)) || [];
 
     const getMaps = (scraperConfig: any): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any> } => {
         const oldJobsMap = new Map<string, any>();
@@ -619,7 +629,7 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         jobs.value.forEach((job: any) => {
             let key = JSON.stringify(job);
             if (job.id) {
-                key = JSON.stringify({ id: job.id, scraperSource: scraperConfig.scraperName });
+                key = JSON.stringify({ id: job.id, scraperSource: scraperIdToName[scraperConfig.scraperId] });
             } else {
                 key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
             }
@@ -628,13 +638,16 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
         });
         return { oldJobsMap, oldJobsDescriptionMap }
     }
+
     const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any) => {
         if (!Array.isArray(job))
             job = [job];
         for (let j of job) {
-            j.scraperSource = scraperConfig.scraperName;
+            j.scraperSource = scraperIdToName[scraperConfig.scraperId];
             const isNewJob = getExisingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
             if (isNewJob) {
+                // if nlp is enabled
+                runNLPOneJob(j);
                 j = await filterJobWithAI(j, currentSearch.filters);
                 jobs.value.push(j);
             }
@@ -642,18 +655,18 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
     }
 
     if (viewSearch || !currentSearch) {
-        jobs.value = JSON.parse(oldJobs);
+        jobs.value = oldJobs;
         loading.value = false;
     }
     else {
-        jobs.value = JSON.parse(oldJobs).map((job: any) => { job.fromLatestSearch = false; return job; });
-        for (const scraperConfig of currentSearch.scraperParameters.filter(config => config.enabled)) {
-            if (!scraperCache.has(scraperConfig.scraperName)) {
-                scraperCache.set(scraperConfig.scraperName, await getStorageObject<any>(scraperConfig.scraperName, {}))
-            }
-            const scraperData = scraperCache.get(scraperConfig.scraperName);
+        jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; return job; });
+        for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
+            const scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
+            if (!scraperData) continue;
             const code = scraperData.code;
-            const parameters = scraperConfig.parameters.map(p => p.value);
+            const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
+            scraperLinkTemplates.value[scraperData.name] = scraperData.jobLinkTemplate;
+            scraperIdToName[scraperConfig.scraperId] = scraperData.name;
 
             if (code) {
                 if (scraperData?.runInBackground) {
@@ -698,7 +711,7 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
                             window.postMessage({
                                 type: 'run-scraper-event',
                                 payload: {
-                                    scraperName: scraperConfig.scraperName,
+                                    scraperName: scraperData.name,
                                     code: code,
                                     parameters: parameters
                                 }
@@ -725,25 +738,27 @@ const executeSearch = async (searchName: string, viewSearch: boolean) => {
                             }
                         }
                     } catch (e: any) {
-                        console.error(`Error running scraper ${scraperConfig.scraperName}:`, e);
+                        console.error(`Error running scraper ${scraperData.name}:`, e);
                         if (e instanceof TypeError && e.message.includes('NetworkError')) {
-                            searchError.value = `CORS Error: The scraper for ${scraperConfig.scraperName} was blocked by the website. Browser scrapers often require a CORS proxy.`;
+                            searchError.value = `CORS Error: The scraper for ${scraperData.name} was blocked by the website. Browser scrapers often require a CORS proxy.`;
                         } else {
-                            searchError.value = `Error running scraper ${scraperConfig.scraperName}: ${e.message || e}`;
+                            searchError.value = `Error running scraper ${scraperData.name}: ${e.message || e}`;
                         }
                     }
                 }
             }
         }
 
-        saveJobs(searchName);
+        saveJobs(currentSearch.id);
         loading.value = false;
     }
 }
 
-const saveJobs = async (searchName: string) => {
+const saveJobs = async (searchId: number) => {
     try {
-        await setStorageObject(`jobs_${searchName}`, jobs.value);
+        // why am I not running createStorageObject instead in case this is the first time you run it? Because you don't need the backend to supply an id for the search. 
+        // you can just use the existing id of the search.
+        await updateStorageObject(JOBS, searchId, jobs.value);
         console.log("Saved", jobs.value.length, "jobs to storage");
     } catch (e: any) {
         console.error("Failed to save jobs to storage:", e);
@@ -794,7 +809,7 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDes
         // why don't we check for the case that the job doesn't have an id and it's a repost?
         // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
         job.fromLatestSearch = true;
-        newJobCount.value = newJobCount.value ? newJobCount.value + 1 : 1;
+        ++newJobCount.value;
         return true;
     }
 }
@@ -831,9 +846,10 @@ const getDuplicates = (jobList: any[]) => {
 }
 
 const filterJobsWithAI = async (jobList: any[], filters: any) => {
-    const openaiApiKey = (await storage.get('openai_api_key')) || ''
-    const endPoint = (await storage.get('end_point')) || ''
-    const model = (await storage.get('model')) || ''
+    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
+    const openaiApiKey = openaiConfig['openai_api_key'] || ''
+    const endPoint = openaiConfig['end_point'] || ''
+    const model = openaiConfig['model'] || ''
     amountFiltered.value = 0;
     if (!openaiApiKey || !endPoint) {
         console.warn("API key or Endpoint missing for AI filtering");
@@ -929,9 +945,10 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
     await Promise.all(aiPromises);
 }
 const filterJobWithAI = async (job: any, filters: Filter[]) => {
-    const openaiApiKey = (await storage.get('openai_api_key')) || ''
-    const endPoint = (await storage.get('end_point')) || ''
-    const model = (await storage.get('model')) || ''
+    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
+    const openaiApiKey = openaiConfig['openai_api_key'] || ''
+    const endPoint = openaiConfig['end_point'] || ''
+    const model = openaiConfig['model'] || ''
     try {
         let localizedPrompt = 'From the job title and description, determine the following and answer in JSON format:';
         let number = 1;
@@ -997,11 +1014,7 @@ const filterJobWithAI = async (job: any, filters: Filter[]) => {
 
 const getJobLink = async (job: any) => {
     if (!job || !job.scraperSource || !job.id) return ''
-    if (!scraperCache.has(job.scraperSource)) {
-        scraperCache.set(job.scraperSource, await getStorageObject<any>(job.scraperSource, {}))
-    }
-    const scraperData = scraperCache.get(job.scraperSource)
-    let url = scraperData?.jobLinkTemplate?.replace('{id}', job.id) || ''
+    let url = scraperLinkTemplates.value[job.scraperSource]?.replace('{id}', job.id) || ''
     if (url && !url.startsWith('http') && !url.startsWith('//')) {
         url = 'https://' + url
     }
@@ -1009,20 +1022,27 @@ const getJobLink = async (job: any) => {
 }
 onMounted(async () => {
     try {
-        const state = window.history.state
-        if (state?.searchName) {
-            document.title = `Search ${state.searchName}`
-            await executeSearch(state.searchName, state?.viewSearch)
+        const urlParams = new URLSearchParams(window.location.search);
+        searchId = Number(urlParams.get('search-id'));
+        const viewSearch = urlParams.get('last-search') === 'true';
+
+
+        if (searchId) {
+            const currentSearch = await getStorageObject(MY_SEARCHES, searchId)
+            document.title = `Search ${currentSearch.name}`
+            await executeSearch(currentSearch, viewSearch)
         } else {
             loading.value = false
         }
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 100) {
-                showScrollUpButton.value = true
-            } else {
-                showScrollUpButton.value = false
-            }
-        })
+        if (scrollContainer.value) {
+            scrollContainer.value.addEventListener('scroll', () => {
+                if (scrollContainer.value && scrollContainer.value.scrollTop > 100) {
+                    showScrollUpButton.value = true
+                } else {
+                    showScrollUpButton.value = false
+                }
+            })
+        }
     } catch (e) {
         console.error('Failed to parse search results:', e)
         loading.value = false

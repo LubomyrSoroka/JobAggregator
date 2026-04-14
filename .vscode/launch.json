@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
-        // run this in terminal first: /Applications/Firefox.app/Contents/MacOS/firefox --start-debugger-server 6000 --no-remote
+        // run this in terminal first: "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox" --start-debugger-server 6000 --no-remote
         {
             "type": "firefox",
             "request": "attach",
@@ -23,6 +23,7 @@
             "name": "Launch Firefox",
             "url": "http://localhost:5173",
             "webRoot": "${workspaceFolder}",
+            "firefoxExecutable": "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
             "firefoxArgs": [
                 "--start-debugger-server",
                 "6000",

@@ -19,22 +19,22 @@
             <!-- Scrapers Tab Content -->
             <template v-if="activeTab === 'scrapers'">
                 <div class="scraper-items">
-                    <div v-for="scraper in scraperNames" :key="scraper"
+                    <div v-for="scraper in scrapersArray" :key="scraper.id"
                         :class="['scraper-item', { 'scraper-toggle': currentScraper === scraper }]"
-                        @click="openSearchParams(scraper)">
-                        <input type="checkbox" v-model="enabled[scraper]" @click.stop="enableScraper(scraper)">
-                        <span class="scraper-name">{{ scraper }}</span>
+                        @click="openSearchParams(scraper.id)">
+                        <input type="checkbox" v-model="enabled[scraper.id]" @click.stop="enableScraper(scraper.id)">
+                        <span class="scraper-name">{{ scraper.name }}</span>
                     </div>
-                    <div v-if="scraperNames.length === 0" class="empty-state">
+                    <div v-if="scrapersArray.length === 0" class="empty-state">
                         No scrapers found. Create one first!
                     </div>
                 </div>
                 <div class="search-config-area">
                     <div class="search-config-scroll">
                         <div class="search-params">
-                            <div class="form-group" v-for="parameter in parameters" :key="parameter.name">
-                                <label>{{ parameter.name }}</label>
-                                <input type="text" v-model="parameter.value">
+                            <div class="form-group" v-for="(value, name) in parameters" :key="name">
+                                <label>{{ name }}</label>
+                                <input type="text" v-model="parameters[name]">
                             </div>
                         </div>
                     </div>
@@ -59,11 +59,18 @@
                     Search</button>
                 <button v-if="originalName !== ''" class="save-button" @click="showConfirmDelete = true">Delete
                     Search</button>
-                <button v-if="originalName !== ''"
-                    :class="['save-button', { 'disabled-button': !Object.values(enabled).some((e: boolean) => e) }]"
-                    @click="runSearch(false)">Run</button>
-                <button v-if="originalName !== ''" class="save-button" @click="runSearch(true)">View Last
-                    Search</button>
+
+                <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }"
+                    :to="`/view-search?search-id=${currentSearch?.id}`">
+                    <button :disabled="!Object.values(enabled).some((e: boolean) => e)"
+                        :class="['save-button', { 'disabled-button': !Object.values(enabled).some((e: boolean) => e) }]"
+                        @click="navigate">Run</button>
+                </RouterLink>
+
+                <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }" class="save-button"
+                    :to="`/view-search?search-id=${currentSearch?.id}&last-search=true`">
+                    <button @click="navigate">View Last Search</button>
+                </RouterLink>
             </div>
         </div>
     </div>
@@ -81,77 +88,81 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ScraperParameter, SavedSearch, ScraperConfig } from '../models'
+import { SavedSearch, ScraperConfig } from '../models'
+import type { ScraperParameter } from '../models'
 import router from '@/router';
 import AIFilters from '../components/AIFilters.vue'
 import Filter, { filters as defaultFilters } from '../components/Filter.ts'
-import { getStorageObject, setStorageObject } from '../services/storageService'
+import { getStorageObject, createStorageObject, updateStorageObject, removeStorageObject, getAllStorageObjects } from '../services/storageService'
+import { MY_SCRAPERS, MY_SEARCHES } from '../services/storeNames.ts'
 
 const showConfirmDelete = ref(false);
-const savedSearches = ref<SavedSearch[]>([]);
-const scraperNames = ref<string[]>([]);
-const parameters = ref<ScraperParameter[]>([]);
-const enabled = ref<Record<string, boolean>>({});
+const scrapersArray = ref<any[]>([]);
+const scrapers = ref<Record<number, any>>({});
+const parameters = ref<ScraperParameter>({});
+const enabled = ref<Record<number, boolean>>({});
 const searchName = ref('');
-const currentScraper = ref('');
-const tempConfigs = ref<ScraperConfig[]>([]);
+const currentScraper = ref<any>(null);
+const tempConfigs = ref<Record<number, ScraperConfig>>({});
 const originalName = ref('');
 const activeTab = ref('scrapers');
 const searchFilters = ref<Filter[]>(defaultFilters);
-const currentSearch = ref<SavedSearch | null>(null); // does this need to be a ref?
+const currentSearch = ref<SavedSearch | null>(null);
 
 onMounted(async () => {
-    scraperNames.value = await getStorageObject<string[]>('my_scraper_data', [])
-    savedSearches.value = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
-    const state = window.history.state;
+    scrapersArray.value = await getAllStorageObjects(MY_SCRAPERS)
+    scrapers.value = Object.fromEntries(scrapersArray.value.map((s: any) => [s.id, s]));
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchId = Number(urlParams.get('search-id'));
 
-    if (state && state.searchName) {
-        currentSearch.value = savedSearches.value.find(s => s.name === state.searchName) || null;
-        currentSearch.value?.scraperParameters.forEach((scraperParameter: ScraperConfig) => {
-            enabled.value[scraperParameter.scraperName] = scraperParameter.enabled;
+    // can just make the tempconfig automatically include all scrapers. Then the rest of the code would be much cleaner...
+    scrapersArray.value.forEach((scraper: any) => {
+        tempConfigs.value[scraper.id] = new ScraperConfig(scraper.id, Object.fromEntries(scraper.parameters.map((p: string) => [p, ''])), false);
+        enabled.value[scraper.id] = false;
+    })
+
+    if (searchId) {
+        currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
+        searchName.value = currentSearch.value?.name || '';
+        originalName.value = currentSearch.value?.name || '';
+
+        Object.values(currentSearch.value?.scraperConfigs || {}).forEach((scraperConfig: ScraperConfig) => {
+            enabled.value[scraperConfig.scraperId] = scraperConfig.enabled;
+            let mappedParameters: ScraperParameter = {};
+            scrapers.value[scraperConfig.scraperId].parameters.forEach((p: string) => {
+                mappedParameters[p] = scraperConfig.parameters[p] || '';
+            });
+            const tempConfig = tempConfigs.value[scraperConfig.scraperId];
+            if (tempConfig) {
+                tempConfig.parameters = mappedParameters;
+                tempConfig.enabled = scraperConfig.enabled;
+            }
+
         });
-        openSearchMenu(state.searchName);
     }
+    openSearchMenu();
 })
 
-const enableScraper = async (scraperName: string) => {
-    const config = tempConfigs.value.find(c => c.scraperName === scraperName)
+const enableScraper = async (scraperId: number) => {
+    const config = tempConfigs.value[scraperId]
+    // if a config already exists, then just modify it
     if (config) {
-        config.enabled = true;
+        config.enabled = !config.enabled;
     }
     else {
-        let mappedParams = [];
-        const scraperData = await getStorageObject<any>(scraperName, {});
-        const defaultParams = scraperData.parameters || [];
-        if (currentSearch.value && currentSearch.value.scraperParameters) {
-            const savedConfig = currentSearch.value.scraperParameters.find(c => c.scraperName === scraperName);
-            if (savedConfig) {
-                mappedParams = defaultParams.map((dp: string) => {
-                    const savedParam = savedConfig.parameters.find((sp: any) => sp.name === dp);
-                    return new ScraperParameter(dp, savedParam ? savedParam.value : '');
-                });
-            }
-        }
-        else {
-            mappedParams = defaultParams.map((p: string) => new ScraperParameter(p, ''));
-        }
-        tempConfigs.value.push(new ScraperConfig(scraperName, mappedParams, enabled.value[scraperName]));
+        throw new Error('Scraper config not found');
     }
 }
 
-const openSearchMenu = (currentSearchName?: string) => {
-    if (currentSearchName) {
-        searchName.value = currentSearchName;
-        originalName.value = currentSearchName;
+const openSearchMenu = () => {
+    if (currentSearch.value) {
+        searchName.value = currentSearch.value.name;
     } else {
         searchName.value = '';
-        originalName.value = '';
     }
 
-    activeTab.value = 'scrapers';
-
+    // you could run this only when the user clicks on filters...
     // Initialize filters from saved search if it exists
-    //const search = savedSearches.value.find(s => s.name === currentSearchName);
     if (currentSearch.value && currentSearch.value.filters) {
         searchFilters.value = currentSearch.value.filters;
     }
@@ -160,96 +171,71 @@ const openSearchMenu = (currentSearchName?: string) => {
         searchFilters.value = defaultFilters;
     }
 
-    const firstScraper = scraperNames.value[0];
+    const firstScraper = scrapersArray.value[0];
     if (firstScraper) {
-        openSearchParams(firstScraper);
+        openSearchParams(firstScraper.id);
     }
 }
-
-// const closeSearchWindow = () => {
-//     tempConfigs.value = [];
-// }
 
 const commitCurrentScraperConfig = () => {
     if (currentScraper.value) { // this value is true if you have previously been alterting the arguments on a different scraper. (So it will only be false when you first open the menu)
-        const config = tempConfigs.value.find(c => c.scraperName === currentScraper.value);
-        const mappedParams = parameters.value.map(p => new ScraperParameter(p.name, p.value));
+        const config = tempConfigs.value[currentScraper.value.id]
+
+        const mappedParams: ScraperParameter = { ...parameters.value };
         if (config) {
             config.parameters = mappedParams;
-            config.enabled = enabled.value[currentScraper.value] ?? false;
-        } else {
-            tempConfigs.value.push(new ScraperConfig(currentScraper.value, mappedParams, enabled.value[currentScraper.value]));
+            config.enabled = enabled.value[currentScraper.value.id] ?? false;
+        }
+        else {
+            throw new Error('Scraper config not found');
         }
     }
 }
 
-const openSearchParams = async (scraperName: string) => {
+const openSearchParams = async (scraperId: number) => {
     commitCurrentScraperConfig();
-    currentScraper.value = scraperName;
-    const config = tempConfigs.value.find(c => c.scraperName === scraperName);
+    currentScraper.value = scrapers.value[scraperId];
+    const config = tempConfigs.value[scraperId]
     if (config) {
-        parameters.value = config.parameters.map(p => new ScraperParameter(p.name, p.value));
-        enabled.value[scraperName] = config.enabled;
-        return;
+        parameters.value = { ...config.parameters };
+        enabled.value[scraperId] = config.enabled;
+        //return;
     }
-    // Check if this scraper is already in the search being edited
-    //const existingSearch = savedSearches.value.find(s => s.name === searchName.value);
-    const scraperData = await getStorageObject<any>(scraperName, {});
-    const defaultParams = scraperData.parameters || [];
-
-    if (currentSearch.value && currentSearch.value.scraperParameters) {
-        const savedConfig = currentSearch.value.scraperParameters.find(c => c.scraperName === scraperName);
-        if (savedConfig) {
-            parameters.value = defaultParams.map((dp: string) => {
-                const savedParam = savedConfig.parameters.find((sp: any) => sp.name === dp);
-                return new ScraperParameter(dp, savedParam ? savedParam.value : '');
-            });
-            enabled.value[scraperName] = savedConfig.enabled;
-            return;
-        }
+    else {
+        throw new Error('Scraper config not found');
     }
-
-    // Fallback: load default parameters for this scraper
-    parameters.value = defaultParams.map((p: string) => new ScraperParameter(p, ''))
-    enabled.value[scraperName] = false;
 }
 
 const saveSearch = async () => {
     if (!searchName.value) return;
     commitCurrentScraperConfig();
-    let search = savedSearches.value.find(s => s.name === originalName.value);
-
-    if (originalName.value && search) {
-        search.name = searchName.value;
-        search.scraperParameters = tempConfigs.value;
-        search.filters = searchFilters.value;
-    } else {
-        // Create new search
-        search = new SavedSearch(searchName.value, tempConfigs.value, searchFilters.value);
-        savedSearches.value.push(search);
+    if (!currentSearch.value || !currentSearch.value.id) {
+        currentSearch.value = new SavedSearch(searchName.value, tempConfigs.value, searchFilters.value);
+        // We pass id: undefined so IndexedDB generates a new auto-incremented ID
+        const id = await createStorageObject(MY_SEARCHES, currentSearch.value);
+        currentSearch.value.id = id;
     }
-
-    await setStorageObject('my_saved_searches', savedSearches.value)
-    //closeSearchWindow();
+    else {
+        currentSearch.value.name = searchName.value;
+        currentSearch.value.scraperConfigs = tempConfigs.value;
+        currentSearch.value.filters = searchFilters.value;
+        updateStorageObject(MY_SEARCHES, currentSearch.value.id, currentSearch.value);
+    }
 }
 
 const deleteSearch = async () => {
-    if (!originalName.value) return;
-    let search = savedSearches.value.find(s => s.name === originalName.value);
-    if (search) {
-        savedSearches.value = savedSearches.value.filter(s => s.name !== originalName.value);
-        await setStorageObject('my_saved_searches', savedSearches.value)
-        router.push('/search');
-    }
+    if (!currentSearch.value || !currentSearch.value.id) return;
+    await removeStorageObject(MY_SEARCHES, currentSearch.value.id);
+    router.push('/search');
 }
 
-const runSearch = async (viewSearch: boolean = false) => {
-    await saveSearch();
-    router.push({
-        name: 'ViewSearch',
-        state: { searchName: searchName.value, viewSearch }
-    });
-}
+// const runSearch = async (viewSearch: boolean = false) => {
+//     await saveSearch();
+//     router.push({
+//         name: 'ViewSearch',
+//         state: { searchId: currentSearch.value?.id, searchName: searchName.value, viewSearch: viewSearch }
+//     });
+// }
 
 </script>
 

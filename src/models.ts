@@ -1,35 +1,30 @@
 import Filter from "./components/Filter";
 
-export class ScraperParameter {
-    name: string;
-    value: string;
-
-    constructor(name: string = '', value: string = '') {
-        this.name = name;
-        this.value = value;
-    }
-}
+export type ScraperParameter = Record<string, string>;
 
 export class ScraperConfig {
-    scraperName: string;
-    parameters: ScraperParameter[];
+    scraperId: number;
+    parameters: ScraperParameter;
     enabled: boolean;
 
-    constructor(scraperName: string = '', parameters: ScraperParameter[] = [], enabled: boolean = true) {
-        this.scraperName = scraperName;
+    constructor(scraperId: number = 0, parameters: ScraperParameter = {}, enabled: boolean = true) {
+        this.scraperId = scraperId;
         this.parameters = parameters;
         this.enabled = enabled;
     }
 }
 
+
 export class SavedSearch {
+    id: number| undefined;
     name: string;
-    scraperParameters: ScraperConfig[];
+    scraperConfigs: Record<number, ScraperConfig>;
     filters: Filter[];
 
-    constructor(name: string = '', scraperParameters: ScraperConfig[] = [], filters: Filter[] = []) {
+    constructor(name: string = '', scraperConfigs: Record<number, ScraperConfig> = {}, filters: Filter[] = []) {
         this.name = name;
-        this.scraperParameters = scraperParameters;
+        this.scraperConfigs = scraperConfigs;
         this.filters = filters;
+        this.id = undefined;
     }
 }

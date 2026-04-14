@@ -5,11 +5,11 @@
         </div>
 
         <div class="scrapers-list">
-            <router-link class="scraper" v-for="search in savedSearches" :key="search.name"
-                :to="{ name: 'EditSearch', state: { searchName: search.name } }">
+            <router-link class="scraper" v-for="search in savedSearches" :key="search.id"
+                :to="{ name: 'EditSearch', query: { 'search-id': search.id } }">
                 {{ search.name }}
             </router-link>
-            <router-link class="add" :to="{ name: 'EditSearch', state: { searchName: undefined } }">
+            <router-link class="add" :to="{ name: 'EditSearch', query: { 'search-id': undefined } }">
                 +
             </router-link>
         </div>
@@ -19,15 +19,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { SavedSearch } from '../models'
-import router from '@/router';
-import { getStorageObject } from '../services/storageService'
+import { getAllStorageObjects } from '../services/storageService'
+import { MY_SEARCHES } from '../services/storeNames'
 
 const savedSearches = ref<SavedSearch[]>([]);
-const scraperNames = ref<string[]>([]);
 
 onMounted(async () => {
-    scraperNames.value = await getStorageObject<string[]>('my_scraper_data', [])
-    savedSearches.value = await getStorageObject<SavedSearch[]>('my_saved_searches', [])
+    savedSearches.value = await getAllStorageObjects(MY_SEARCHES)
 })
 
 </script>

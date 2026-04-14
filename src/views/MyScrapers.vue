@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
-import { getStorageObject } from '../services/storageService'
+import { getAllStorageObjects } from '../services/storageService'
+import { MY_SCRAPERS } from '../services/storeNames'
 
-// 1. Create a reactive variable to hold the scrapers
 const scrapers = ref<any[]>([])
 onMounted(async () => {
-    // 2. Read the data from storage service
-    scrapers.value = await getStorageObject<any[]>('my_scraper_data', [])
+    scrapers.value = await getAllStorageObjects(MY_SCRAPERS)
 })
 </script>
 
@@ -18,9 +17,9 @@ onMounted(async () => {
         </div>
 
         <div class="scrapers-list">
-            <RouterLink v-for="scraper in scrapers" :key="scraper" class="scraper"
-                :to="`/code-editor?scraper-name=${scraper}`">
-                {{ scraper }}
+            <RouterLink v-for="scraper in scrapers" :key="scraper.id" class="scraper"
+                :to="`/code-editor?scraper-id=${scraper.id}`">
+                {{ scraper.name }}
             </RouterLink>
             <RouterLink class="add" to="/code-editor">
                 +

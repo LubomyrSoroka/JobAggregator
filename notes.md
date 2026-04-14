@@ -11,7 +11,6 @@
 - Should the height of each job card be the same? (Currently, I think this is only the case for cards on the same row)
 - May want to keep only one of salary or salary estimate for the meta items to preserve space.
 - Can experiment and add scrolling to each of the individual job cards. (would this make it more awkward to scroll the whole page?)
-- Allow users to download the current data as JSON.
 - Is the stats tab calculating based off the last search or all the data?
 - Instead of tooltips can have the job title and company name be automatically rotating horizontally if they are too long. (This could look awkward)
 - Need to use a color scheme instead of assigning constants as colors everywhere.
@@ -30,7 +29,12 @@
 - Could seriously consider forcing jobs to have an id. Would definitely simplify some of the logic.
 - Allow users to run a search even if they are creating one (don't just show the save search button).
 - Bug: clicking save search when creating a new search would create duplicates if you click it more than once
-- Names are being cut off by the displaying the scraper being used for the job.
+- Names are being cut off by displaying the scraper being used for the job.
+- OpenAI API config should not get auto-saved. It should be saved when the user clicks the save button.
+- The look of the add search screen when there are no scrapers should be improved
+- When switching between scrapers on EditSearch, scroll up to the top of the parameters section.
+- Allow searching and combining multiple terms from one scraper for one search
+- Highlighting text should not trigger a click on a job card.
 
 
 # DONE
@@ -41,3 +45,4 @@
 - Allow scrapers to yield arrays of jobs instead of a single job.
 - Allow grouping jobs by date.
 - Can only store 5mb in localstorage. Best way around this is to just make a backend. I've never seen a job description mention IndexedDb...
+- Allow users to download the current data as JSON.

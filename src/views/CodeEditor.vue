@@ -31,9 +31,9 @@
     <div v-if="runMenu" class="dimmed-background">
         <div class="run-menu">
             <button class="close" @click="runMenu = false">X</button>
-            <div class="run-menu-parameters" v-for="parameter in parameters" :key="parameter.name">
-                <label :for="parameter.name">{{ parameter.name }}</label>
-                <input :id="parameter.name" v-model="parameter.value" />
+            <div class="run-menu-parameters" v-for="(value, name) in parameters" :key="name">
+                <label :for="name">{{ name }}</label>
+                <input :id="name" v-model="parameters[name]" />
             </div>
             <button @click="runScraper(runInBackground)">Run</button>
         </div>
@@ -51,9 +51,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { ScraperParameter } from '../models'
+import type { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
-import { storage, getStorageObject, setStorageObject } from '../services/storageService'
+import { getStorageObject, updateStorageObject, createStorageObject, removeStorageObject } from '../services/storageService'
+import { MY_SCRAPERS } from '../services/storeNames'
 const code = ref('');
 const scraperName = ref('');
 const error = ref('');
@@ -61,27 +62,31 @@ const outputCount = ref(0);
 const jobLinkTemplate = ref('');
 const output = ref('');
 const runMenu = ref(false);
-const parameters = ref<ScraperParameter[]>([]);
+const parameters = ref<ScraperParameter>({});
 let originalName: string | null = null;
 const confirmDelete = ref(false);
 let originalCodeValue: string | undefined = undefined;
 let originalJobLinkTemplateValue: string | undefined = undefined;
 let originalRunInBackgroundValue: boolean | undefined = undefined;
 const runInBackground = ref(false);
+const currentScraper = ref<any>(null);
+const scraperId = ref<number | null>(null);
 
 onMounted(async () => {
     const urlParams = new URLSearchParams(window.location.search)
-    scraperName.value = urlParams.get('scraper-name') || ''
-    originalName = scraperName.value;
-    if (scraperName.value) {
-        const data = await getStorageObject<any>(scraperName.value, {})
-        code.value = data.code || ''
-        parameters.value = await getStorageObject<ScraperParameter[]>(`${scraperName.value}_run_args`, [])
-        jobLinkTemplate.value = data.jobLinkTemplate || ''
-        runInBackground.value = data.runInBackground || false
+    scraperId.value = Number(urlParams.get('scraper-id')) || null
+    if (scraperId.value) {
+        currentScraper.value = await getStorageObject(MY_SCRAPERS, scraperId.value)
+        // what's the point of this assigning? Why doesn't the html just access currentScraper.value.name for example? Or I guess that's not how it really accesses things...
+        scraperName.value = currentScraper.value.name || ''
+        code.value = currentScraper.value.code || ''
+        parameters.value = currentScraper.value.editor_run_args || []
+        jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
+        runInBackground.value = currentScraper.value.runInBackground || false
     }
 
     // Set value after data is loaded so we have the correct base for comparison
+    originalName = scraperName.value;
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
@@ -109,10 +114,9 @@ onBeforeRouteLeave((to, from, next) => {
 })
 
 const deleteScraper = async () => {
-    await storage.remove(scraperName.value);
-    let myScrapers = await getStorageObject<string[]>('my_scraper_data', [])
-    myScrapers = myScrapers.filter((scraper: string) => scraper !== scraperName.value)
-    await setStorageObject('my_scraper_data', myScrapers)
+    if (scraperId.value)
+        await removeStorageObject(MY_SCRAPERS, scraperId.value);
+
 }
 
 const saveScraper = async () => {
@@ -120,29 +124,28 @@ const saveScraper = async () => {
         error.value = 'Please enter a scraper name'
         return
     }
-    if (originalName && originalName !== scraperName.value) {
-        await storage.remove(originalName);
-        await storage.remove(`${originalName}_run_args`);
-        await setStorageObject(`${scraperName.value}_run_args`, parameters.value);
-        let myScrapers = await getStorageObject<string[]>('my_scraper_data', []);
-        myScrapers = myScrapers.map((scraper: string) => {
-            if (scraper === originalName) {
-                return scraperName.value;
-            }
-            return scraper;
+    if (!scraperId.value) {
+        scraperId.value = await createStorageObject(MY_SCRAPERS, {
+            name: scraperName.value,
+            code: code.value,
+            jobLinkTemplate: jobLinkTemplate.value,
+            parameters: getParameterNames(),
+            runInBackground: runInBackground.value
         });
-        await setStorageObject('my_scraper_data', myScrapers);
+    }
+    else {
+        await updateStorageObject(MY_SCRAPERS, scraperId.value, {
+            name: scraperName.value,
+            code: code.value,
+            jobLinkTemplate: jobLinkTemplate.value,
+            parameters: getParameterNames(),
+            runInBackground: runInBackground.value
+        });
     }
     originalName = scraperName.value;
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
-    await setStorageObject(scraperName.value, { code: code.value, jobLinkTemplate: jobLinkTemplate.value, parameters: getParameterNames(), runInBackground: runInBackground.value })
-    let myScrapers = await getStorageObject<string[]>('my_scraper_data', [])
-    if (!myScrapers.includes(scraperName.value)) {
-        myScrapers.push(scraperName.value)
-        await setStorageObject('my_scraper_data', myScrapers)
-    }
 }
 const getParameterNames = () => {
     const match = code.value.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
@@ -158,17 +161,21 @@ const getParameterNames = () => {
 const openRunMenu = () => {
     runMenu.value = true;
     const names = getParameterNames();
-    parameters.value = names.map(name => {
-        const existing = parameters.value.find(p => p.name === name);
-        return { name, value: existing ? existing.value : '' };
+    const newParams: ScraperParameter = {};
+    names.forEach(name => {
+        newParams[name] = parameters.value[name] || '';
     });
+    parameters.value = newParams;
 }
 
 const runScraper = async (inBackground: boolean = false) => {
     output.value = '';
     error.value = '';
-
-    await setStorageObject(`${scraperName.value}_run_args`, parameters.value);
+    if (!scraperId.value) {
+        throw new Error('Scraper ID is not defined');
+    }
+    currentScraper.value.editor_run_args = parameters.value;
+    await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value);
 
     if (inBackground) {
         runMenu.value = false;
@@ -215,7 +222,7 @@ const runScraper = async (inBackground: boolean = false) => {
                 // Dispatch the event to trigger the content script via postMessage
                 console.log("[SCRAPER-DEBUG] Sending run-scraper-event via postMessage", {
                     scraperName: scraperName.value,
-                    parameters: parameters.value.map(p => p.value)
+                    parameters: getParameterNames().map(name => parameters.value[name])
                 });
 
                 window.postMessage({
@@ -223,23 +230,11 @@ const runScraper = async (inBackground: boolean = false) => {
                     payload: {
                         scraperName: scraperName.value,
                         code: code.value,
-                        parameters: parameters.value.map(p => p.value)
+                        parameters: getParameterNames().map(name => parameters.value[name])
                     }
                 }, '*');
             });
 
-            // output.value = '';
-            // const result = response;
-
-            // if (Array.isArray(result)) {
-            //     result.forEach((job: any) => {
-            //         output.value += JSON.stringify(job, null, 2) + '\n';
-            //         outputCount.value++;
-            //     });
-            // } else if (result) {
-            //     output.value = JSON.stringify(result, null, 2);
-            //     outputCount.value++;
-            // }
         } catch (e: any) {
             error.value = `Execution Error: ${e.message}`;
             output.value = "";
@@ -254,7 +249,8 @@ const runScraper = async (inBackground: boolean = false) => {
             const scrapeFunction = scraperLoader();
 
             if (typeof scrapeFunction === 'function') {
-                for await (const job of scrapeFunction(...parameters.value.map(p => p.value))) {
+                const args = getParameterNames().map(name => parameters.value[name]);
+                for await (const job of scrapeFunction(...args)) {
                     output.value += JSON.stringify(job, null, 2) + '\n';
                     outputCount.value++;
                 }

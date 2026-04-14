@@ -23,25 +23,29 @@
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
-import { storage } from '../services/storageService'
+import { getAllStorageObjects, updateStorageObject } from '../services/storageService'
+import { OPENAI_API_CONFIG } from '../services/storeNames'
 
 const openaiApiKey = ref('')
 const endPoint = ref('')
 const model = ref('')
 
 onMounted(async () => {
-    openaiApiKey.value = (await storage.get('openai_api_key')) || ''
-    endPoint.value = (await storage.get('end_point')) || ''
-    model.value = (await storage.get('model')) || ''
+    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG)
+    JSON.parse(openaiConfig)
+
+    openaiApiKey.value = openaiConfig['openai_api_key'] || ''
+    endPoint.value = openaiConfig['end_point'] || ''
+    model.value = openaiConfig['model'] || ''
 })
 const saveOpenAIKey = async () => {
-    await storage.set('openai_api_key', openaiApiKey.value)
+    await updateStorageObject(OPENAI_API_CONFIG, 'openai_api_key', openaiApiKey.value)
 }
 const saveEndPoint = async () => {
-    await storage.set('end_point', endPoint.value)
+    await updateStorageObject(OPENAI_API_CONFIG, 'end_point', endPoint.value)
 }
 const saveModel = async () => {
-    await storage.set('model', model.value)
+    await updateStorageObject(OPENAI_API_CONFIG, 'model', model.value)
 }
 </script>
 
