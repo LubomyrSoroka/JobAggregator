@@ -64,7 +64,7 @@
                     :to="`/view-search?search-id=${currentSearch?.id}`">
                     <button :disabled="!Object.values(enabled).some((e: boolean) => e)"
                         :class="['save-button', { 'disabled-button': !Object.values(enabled).some((e: boolean) => e) }]"
-                        @click="navigate">Run</button>
+                        @click="async () => { await saveSearch(); navigate(); }">Run</button>
                 </RouterLink>
 
                 <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }" class="save-button"

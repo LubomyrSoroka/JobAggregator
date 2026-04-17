@@ -35,7 +35,9 @@
 - When switching between scrapers on EditSearch, scroll up to the top of the parameters section.
 - Allow searching and combining multiple terms from one scraper for one search
 - Highlighting text should not trigger a click on a job card.
-
+- if you match the id of an existing job, then the job should use the newest description (if it's even different)
+- Add a copy description button?
+- Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Check if possible to get website for the company)
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.

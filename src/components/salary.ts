@@ -1,5 +1,6 @@
 
 export function parseNumeric(val: any): number[] | null {
+    if(Array.isArray(val)) return val;
     if (typeof val === 'number') return [val];
     if (!val || typeof val !== 'string') return null;
     const cleaned = val.replace(/[^0-9.-]/g, '');

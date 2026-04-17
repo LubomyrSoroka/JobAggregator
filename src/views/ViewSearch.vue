@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
-                                }} in total</div>
+                            }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                                }} Since Last
+                            }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                                }} </div>
+                            }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -50,6 +50,7 @@
                                         class="styled-select target">
                                         <option v-for="option in sortOptions" :value="option">{{ option }}</option>
                                     </select>
+                                    <input type="text" v-model="locationFilter">
                                 </div>
                             </div>
 
@@ -227,7 +228,7 @@
                                                 </span>
                                                 <span v-if="job.scraperSource" class="scraper-badge">{{
                                                     job.scraperSource
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -289,7 +290,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, reactive, watch } from 'vue'
+import { ref, onMounted, computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { SavedSearch, ScraperConfig } from '../models'
 import type { ScraperParameter } from '../models'
@@ -326,6 +327,7 @@ const sortOrder = ref(['experience', 'salary'])
 const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
+const locationFilter = ref('')
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
@@ -370,7 +372,7 @@ const runAI = async () => {
     try {
         await filterJobsWithAI(jobs.value, aiFilters.value)
         // sortJobs() is called in displayedJobs
-        await saveJobs(window.history.state.searchName)
+        await saveJobs(searchId)
     } finally {
         aiFiltering.value = false
     }
@@ -380,7 +382,7 @@ const runNLP = async () => {
     jobs.value.forEach(job => {
         runNLPOneJob(job)
     })
-    saveJobs(window.history.state.searchName);
+    saveJobs(searchId);
 }
 
 const runNLPOneJob = async (job: any) => {
@@ -392,11 +394,14 @@ const runNLPOneJob = async (job: any) => {
         job.yearsOfExperience = nlpResult["years of experience"]
         job.foundThroughAI ? job.foundThroughAI.push('yearsOfExperience') : job.foundThroughAI = ['yearsOfExperience']
     }
-    if (!job.salaryRange && nlpResult["salary range"] !== null) {
+    //if (!job.salaryRange && nlpResult["salary range"] !== null) {
+
+    if (nlpResult["salary range"] !== null) {
         job.salaryRange = nlpResult["salary range"]
         job.foundThroughAI ? job.foundThroughAI.push('salaryRange') : job.foundThroughAI = ['salaryRange']
     }
-    if (!job.salaryType && nlpResult["salary type"] !== null) {
+    //if (!job.salaryType && nlpResult["salary type"] !== null) {
+    if (nlpResult["salary type"] !== null) {
         job.salaryType = nlpResult["salary type"]
         job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
     }
@@ -423,6 +428,9 @@ const displayedJobs = computed(() => {
     }
     if (relevantOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
+    }
+    if (locationFilter.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(locationFilter.value, 'i').test(job.location))
     }
     filteredJobs = getDuplicates(filteredJobs)
     const jobGroups = groupJobs(filteredJobs)
