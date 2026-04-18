@@ -20,19 +20,24 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
-                            }} in total</div>
+                                }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
+                                }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
+                                }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
                                 }} Found
                             </div>
+                            <div v-if="lastSearchTime != null" class="new-jobs-badge">Last Search: {{
+                                lastSearchTime.toLocaleString('en-US', {
+                                    month: 'long', day: 'numeric', year: 'numeric',
+                                    hour: 'numeric', minute: '2-digit', hour12: true
+                                }) }}</div>
                         </div>
 
                         <div class="panel-actions">
@@ -257,7 +262,7 @@
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -375,6 +380,7 @@ const scraperSourceToIcon = reactive<Record<number, string>>({});
 const scraperLinkTemplates = reactive<Record<number, string>>({});
 const currentSearch = ref<any>(null);
 const scraperJobCounts = ref<Record<number, number>>({});
+const lastSearchTime = ref<Date | null>(null);
 
 let searchId: number;
 
@@ -705,8 +711,10 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         jobs.value = oldJobs;
         getJobCounts();
         loading.value = false;
+        lastSearchTime.value = currentSearch.lastSearchTime ? new Date(currentSearch.lastSearchTime) : null;
     }
     else {
+        lastSearchTime.value = new Date();
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; return job; });
         getJobCounts();
         for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
@@ -806,6 +814,7 @@ const saveJobs = async (searchId: number) => {
         // why am I not running createStorageObject instead in case this is the first time you run it? Because you don't need the backend to supply an id for the search. 
         // you can just use the existing id of the search.
         await updateStorageObject(JOBS, searchId, jobs.value);
+        await updateStorageObject(MY_SEARCHES, searchId, { ...currentSearch.value, lastSearchTime: lastSearchTime.value });
         console.log("Saved", jobs.value.length, "jobs to storage");
     } catch (e: any) {
         console.error("Failed to save jobs to storage:", e);

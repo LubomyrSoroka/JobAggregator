@@ -37,7 +37,7 @@
 - Highlighting text should not trigger a click on a job card.
 - if you match the id of an existing job, then the job should use the newest description (if it's even different)
 - Add a copy description button?
-- Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Check if possible to get website for the company)
+- Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...)
 - reloading the page should just set view last search to true? (not sure that this is a good idea)
 - improve this: 
     // both of these are assuming that the names are unique (which they are not necessarily. Only the ids are)
@@ -45,7 +45,7 @@
     const scraperLinkTemplates = ref<Record<string, string>>({})
 
 - The scraper icon does not look centered within the scraper-count css thing in ViewSearch.vue.
-
+- When updating things in the backend, see if you can update just one thing instead of the entire thing. E.g., if you click "save" on a job, then just update the saved status of that job instead of updating the entire jobs array.
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
