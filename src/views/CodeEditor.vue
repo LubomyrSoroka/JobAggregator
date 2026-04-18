@@ -17,6 +17,14 @@
         <div class="run-in-background">
             <input v-model="runInBackground" type="checkbox"> Run in Background
         </div>
+        <div>Scraper Icon</div>
+        <!-- <input type="file" @change="handleFileUpload" accept="image/*"> -->
+        <div class="icon-input-group">
+            <input type="text" v-model="faviconUrl" placeholder="Enter domain (e.g. google.com)">
+        </div>
+        <img v-if="faviconUrl" :src="`https://www.google.com/s2/favicons?domain=${faviconUrl}&sz=128`"
+            alt="Scraper Icon" width="32" height="32">
+
         <div class="buttons">
             <button @click="saveScraper">Save</button>
             <button @click="openRunMenu">Run</button>
@@ -71,18 +79,22 @@ let originalRunInBackgroundValue: boolean | undefined = undefined;
 const runInBackground = ref(false);
 const currentScraper = ref<any>(null);
 const scraperId = ref<number | null>(null);
+const faviconUrl = ref<string>('');
 
 onMounted(async () => {
     const urlParams = new URLSearchParams(window.location.search)
     scraperId.value = Number(urlParams.get('scraper-id')) || null
     if (scraperId.value) {
         currentScraper.value = await getStorageObject(MY_SCRAPERS, scraperId.value)
-        // what's the point of this assigning? Why doesn't the html just access currentScraper.value.name for example? Or I guess that's not how it really accesses things...
         scraperName.value = currentScraper.value.name || ''
         code.value = currentScraper.value.code || ''
         parameters.value = currentScraper.value.editor_run_args || []
         jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
         runInBackground.value = currentScraper.value.runInBackground || false
+
+        if (currentScraper.value.icon) {
+            faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
+        }
     }
 
     // Set value after data is loaded so we have the correct base for comparison
@@ -124,13 +136,13 @@ const saveScraper = async () => {
         error.value = 'Please enter a scraper name'
         return
     }
+    const iconValue = faviconUrl.value ? (faviconUrl.value.startsWith('http') ? faviconUrl.value : `https://www.google.com/s2/favicons?domain=${faviconUrl.value}&sz=128`) : '';
     if (!scraperId.value) {
         scraperId.value = await createStorageObject(MY_SCRAPERS, {
             name: scraperName.value,
             code: code.value,
             jobLinkTemplate: jobLinkTemplate.value,
-            parameters: getParameterNames(),
-            runInBackground: runInBackground.value
+            icon: iconValue
         });
     }
     else {
@@ -139,7 +151,8 @@ const saveScraper = async () => {
             code: code.value,
             jobLinkTemplate: jobLinkTemplate.value,
             parameters: getParameterNames(),
-            runInBackground: runInBackground.value
+            runInBackground: runInBackground.value,
+            icon: iconValue
         });
     }
     originalName = scraperName.value;
@@ -398,5 +411,49 @@ textarea {
     font-size: 16px;
     font-family: 'Courier New', monospace;
     resize: none;
+}
+
+.icon-input-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.icon-input-group input {
+    flex: 1;
+}
+
+.capture-button {
+    padding: 8px 16px;
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.capture-button:disabled {
+    background-color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.icon-preview {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.captured-badge {
+    font-size: 0.75rem;
+    background: #22c55e;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
 }
 </style>

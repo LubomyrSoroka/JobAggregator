@@ -50,7 +50,6 @@
                                         class="styled-select target">
                                         <option v-for="option in sortOptions" :value="option">{{ option }}</option>
                                     </select>
-                                    <input type="text" v-model="locationFilter">
                                 </div>
                             </div>
 
@@ -82,6 +81,14 @@
                                     <span class="toggle-label">
                                         Relevant Only
                                     </span>
+                                </label>
+                                <label>
+                                    Location Filter:
+                                    <input type="text" v-model="locationFilter">
+                                </label>
+                                <label>
+                                    Title Filter:
+                                    <input type="text" v-model="titleFilter">
                                 </label>
                             </div>
 
@@ -123,7 +130,21 @@
                         </button>
                     </div>
                 </div>
-
+                <label>
+                    Job Count Per Scraper:
+                </label>
+                <div v-if="currentSearch" class="scraper-count-list">
+                    <div v-for="scraperConfig in (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)"
+                        :key="scraperConfig.scraperId" class="scraper-count">
+                        <div v-if="scraperSourceToIcon[scraperConfig.scraperId]">
+                            <img :src="scraperSourceToIcon[scraperConfig.scraperId]" alt="" width="20" height="20">
+                        </div>
+                        <div v-else>
+                            {{ scraperIdToName[scraperConfig.scraperId] }}:
+                        </div>
+                        {{ scraperJobCounts[scraperConfig.scraperId] ?? 0 }}
+                    </div>
+                </div>
 
                 <div v-if="aiFiltering" class="ai-progress-banner">
                     <div class="mini-loader"></div>
@@ -187,8 +208,7 @@
                         <hr class="divider">
                         <div class="job-full-description" v-html="selectedJob.description"></div>
                         <div class="job-full-footer">
-                            <a v-if="selectedJob.applyLink || selectedJob.url"
-                                :href="selectedJob.applyLink || selectedJob.url" target="_blank"
+                            <a v-if="selectedJob.applyLink" :href="selectedJob.applyLink" target="_blank"
                                 class="primary-button apply-large">
                                 Apply for this position
                             </a>
@@ -209,15 +229,20 @@
                     <div v-for="(jobs, dateIndex) in displayedJobs" :key="dateIndex" class="job-group">
                         <h3 class="job-group-title">{{ formatDate(jobs[0]) }}</h3>
                         <div class="job-grid">
-                            <div v-for="(jobCard, jobCardIndex) in jobs[1]" :key="jobCard[0]?.url || jobCardIndex"
+                            <div v-for="(jobCard, jobCardIndex) in jobs[1]" :key="jobCard[0]?.applyLink || jobCardIndex"
                                 :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
 
-                                <div v-for="(job, index) in jobCard" :key="job.url || index" class="job-content"
+                                <div v-for="(job, index) in jobCard" :key="job.applyLink || index" class="job-content"
                                     @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
                                     <div v-if="job.image" class="job-image">
                                         <img :src="job.image" :alt="job.company">
                                     </div>
-                                    <div class="job-header" :class="{ 'with-image': job.image }">
+                                    <div v-else-if="job.website" class="job-image" ref="faviconContainers">
+                                        <img :src="`https://www.google.com/s2/favicons?domain=${job.website}&sz=128`"
+                                            :alt="job.company"
+                                            @error="(($event.target as HTMLImageElement).closest('.job-image') as HTMLElement)!.style.display = 'none'">
+                                    </div>
+                                    <div class="job-header" :class="{ 'with-image': job.image || job.website }">
                                         <div class="job-title-row">
                                             <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle ||
                                                 `Untitled
@@ -226,8 +251,12 @@
                                                 <span v-if="jobCard.length > 1" class="version-badge">
                                                     {{ Number(index) + 1 }} / {{ jobCard.length }}
                                                 </span>
-                                                <span v-if="job.scraperSource" class="scraper-badge">{{
-                                                    job.scraperSource
+                                                <span v-if="scraperSourceToIcon[job.scraperSource]">
+                                                    <img :src="scraperSourceToIcon[job.scraperSource]"
+                                                        :alt="job.company" width="20" height="20">
+                                                </span>
+                                                <span v-else-if="job.scraperSource" class="scraper-badge">{{
+                                                    scraperIdToName[job.scraperSource]
                                                     }}</span>
                                             </div>
                                         </div>
@@ -258,8 +287,8 @@
                                         <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
                                             Unsave
                                         </button>
-                                        <a v-if="job.applyLink || job.url" :href="job.applyLink || job.url"
-                                            target="_blank" class="apply-button" @click.stop>
+                                        <a v-if="job.applyLink" :href="job.applyLink" target="_blank"
+                                            class="apply-button" @click.stop>
                                             Apply Now
                                         </a>
                                     </div>
@@ -328,6 +357,7 @@ const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
 const locationFilter = ref('')
+const titleFilter = ref('')
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
@@ -340,8 +370,12 @@ const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
 const searchError = ref<string | null>(null)
-const scraperLinkTemplates = ref<Record<string, string>>({})
-const scraperIdToName: Record<number, string> = {}
+const scraperIdToName = reactive<Record<number, string>>({})
+const scraperSourceToIcon = reactive<Record<number, string>>({});
+const scraperLinkTemplates = reactive<Record<number, string>>({});
+const currentSearch = ref<any>(null);
+const scraperJobCounts = ref<Record<number, number>>({});
+
 let searchId: number;
 
 const scrollToTop = () => {
@@ -431,6 +465,9 @@ const displayedJobs = computed(() => {
     }
     if (locationFilter.value) {
         filteredJobs = filteredJobs.filter(job => RegExp(locationFilter.value, 'i').test(job.location))
+    }
+    if (titleFilter.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(titleFilter.value, 'i').test(job.positionTitle))
     }
     filteredJobs = getDuplicates(filteredJobs)
     const jobGroups = groupJobs(filteredJobs)
@@ -637,7 +674,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         jobs.value.forEach((job: any) => {
             let key = JSON.stringify(job);
             if (job.id) {
-                key = JSON.stringify({ id: job.id, scraperSource: scraperIdToName[scraperConfig.scraperId] });
+                key = JSON.stringify({ id: job.id, scraperSource: scraperConfig.scraperId });
             } else {
                 key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
             }
@@ -651,30 +688,32 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         if (!Array.isArray(job))
             job = [job];
         for (let j of job) {
-            j.scraperSource = scraperIdToName[scraperConfig.scraperId];
+            j.scraperSource = scraperConfig.scraperId;
+            j.website = addHttp(j.website);
             const isNewJob = getExisingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
             if (isNewJob) {
                 // if nlp is enabled
                 runNLPOneJob(j);
                 j = await filterJobWithAI(j, currentSearch.filters);
                 jobs.value.push(j);
+                scraperJobCounts.value[scraperConfig.scraperId] = (scraperJobCounts.value[scraperConfig.scraperId] || 0) + 1;
             }
         }
     }
 
     if (viewSearch || !currentSearch) {
         jobs.value = oldJobs;
+        getJobCounts();
         loading.value = false;
     }
     else {
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; return job; });
+        getJobCounts();
         for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
             const scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
             if (!scraperData) continue;
             const code = scraperData.code;
             const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
-            scraperLinkTemplates.value[scraperData.name] = scraperData.jobLinkTemplate;
-            scraperIdToName[scraperConfig.scraperId] = scraperData.name;
 
             if (code) {
                 if (scraperData?.runInBackground) {
@@ -1020,14 +1059,46 @@ const filterJobWithAI = async (job: any, filters: Filter[]) => {
     }
 }
 
+// gets the job link from the scraper website. This is different from the apply link in that if you found a job through indeed, this link will be the Indeed link and not the apply link which could be on Workday for example.
 const getJobLink = async (job: any) => {
     if (!job || !job.scraperSource || !job.id) return ''
-    let url = scraperLinkTemplates.value[job.scraperSource]?.replace('{id}', job.id) || ''
-    if (url && !url.startsWith('http') && !url.startsWith('//')) {
+    let url = scraperLinkTemplates[job.scraperSource]?.replace('{id}', job.id) || ''
+    url = addHttp(url)
+    return url
+}
+const addHttp = (url: string) => {
+    if (!url) return url;
+    if (!url.startsWith('http') && !url.startsWith('//')) {
         url = 'https://' + url
     }
     return url
 }
+const loadScraperMetadata = async (scraperId: number) => {
+    const scraperData = await getStorageObject(MY_SCRAPERS, scraperId);
+    if (scraperData) {
+        loadScraperMetadataFromData(scraperId, scraperData);
+    }
+}
+
+const loadScraperMetadataFromData = (scraperId: number, scraperData: any) => {
+    scraperIdToName[scraperId] = scraperData.name;
+    scraperLinkTemplates[scraperId] = scraperData.jobLinkTemplate;
+    if (scraperData.icon) {
+        scraperSourceToIcon[scraperId] = scraperData.icon;
+    }
+}
+
+const getJobCounts = () => {
+    scraperJobCounts.value = {}; // Reset counts before starting
+    jobs.value.forEach((job: any) => {
+        const id = job.scraperSource;
+        if (id) {
+            scraperJobCounts.value[id] = (scraperJobCounts.value[id] || 0) + 1;
+        }
+    })
+}
+
+
 onMounted(async () => {
     try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -1036,9 +1107,17 @@ onMounted(async () => {
 
 
         if (searchId) {
-            const currentSearch = await getStorageObject(MY_SEARCHES, searchId)
-            document.title = `Search ${currentSearch.name}`
-            await executeSearch(currentSearch, viewSearch)
+            currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
+            document.title = `Search ${currentSearch.value.name}`
+
+            // Pre-load all enabled scraper metadata
+            for (const config of (Object.values(currentSearch.value.scraperConfigs || {}) as any[])) {
+                if (config.enabled) {
+                    await loadScraperMetadata(config.scraperId);
+                }
+            }
+
+            await executeSearch(currentSearch.value, viewSearch)
         } else {
             loading.value = false
         }
@@ -2054,5 +2133,21 @@ input:checked+.slider:before {
 .chart-container {
     background: #ffffff;
     border-radius: 12px;
+}
+
+.scraper-count {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 5px;
+    border-radius: 10px;
+    background-color: white;
+}
+
+.scraper-count-list {
+    display: flex;
+    gap: 10px;
+    align-items: center;
 }
 </style>

@@ -37,8 +37,8 @@ export function getExperienceNLP(text: string): { "years of experience": number 
             }
         }
     }
-    //regexForward.lastIndex = 0
-    //text = text.replace(regexForward, '<b style="color: red;">$&</b>')
+    regexForward.lastIndex = 0
+    text = text.replace(regexForward, '<b style="color: red;">$&</b>')
 
     // Look for salaries like $100k, $100k - $150k, $50/hr etc. Disqualify if followed by million or billion.
     // or 80 - 150k, then the 80 should be treated as 80k
@@ -103,8 +103,8 @@ export function getExperienceNLP(text: string): { "years of experience": number 
         }
     }
 
-    //salaryRegex.lastIndex = 0;
-    //text = text.replace(salaryRegex, '<b style="color: red;">$&</b>');
+    salaryRegex.lastIndex = 0;
+    text = text.replace(salaryRegex, '<b style="color: red;">$&</b>');
 
     return {
         "years of experience": maxYears === -Infinity ? null : maxYears,
