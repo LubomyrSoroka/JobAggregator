@@ -46,6 +46,7 @@
 
 - The scraper icon does not look centered within the scraper-count css thing in ViewSearch.vue.
 - When updating things in the backend, see if you can update just one thing instead of the entire thing. E.g., if you click "save" on a job, then just update the saved status of that job instead of updating the entire jobs array.
+- Bug: when exiting from a scraper to another page (e.g., the searches page) the document title isn't appropriate.
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.

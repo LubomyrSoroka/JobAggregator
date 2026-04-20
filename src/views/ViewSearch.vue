@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
                                 'Jobs'
-                                }} in total</div>
+                            }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                                }} Since Last
+                            }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                                }} </div>
+                            }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -139,15 +139,15 @@
                     Job Count Per Scraper:
                 </label>
                 <div v-if="currentSearch" class="scraper-count-list">
-                    <div v-for="scraperConfig in (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)"
-                        :key="scraperConfig.scraperId" class="scraper-count">
-                        <div v-if="scraperSourceToIcon[scraperConfig.scraperId]">
-                            <img :src="scraperSourceToIcon[scraperConfig.scraperId]" alt="" width="20" height="20">
+                    <div v-for="scraperId in Object.keys(scraperJobCounts).map(Number)" :key="scraperId"
+                        class="scraper-count">
+                        <div v-if="scraperSourceToIcon[scraperId]">
+                            <img :src="scraperSourceToIcon[scraperId]" alt="" width="20" height="20">
                         </div>
                         <div v-else>
-                            {{ scraperIdToName[scraperConfig.scraperId] }}:
+                            {{ scraperIdToName[scraperId] }}:
                         </div>
-                        {{ scraperJobCounts[scraperConfig.scraperId] ?? 0 }}
+                        {{ scraperJobCounts[scraperId] ?? 0 }}
                     </div>
                 </div>
 
@@ -262,7 +262,7 @@
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -1105,6 +1105,11 @@ const getJobCounts = () => {
             scraperJobCounts.value[id] = (scraperJobCounts.value[id] || 0) + 1;
         }
     })
+    for (const scraperId of (Object.keys(scraperJobCounts.value)).map(Number)) {
+        if (!scraperIdToName[scraperId] || !scraperLinkTemplates[scraperId] || !scraperSourceToIcon[scraperId]) {
+            loadScraperMetadata(scraperId);
+        }
+    }
 }
 
 
