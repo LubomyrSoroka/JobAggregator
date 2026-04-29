@@ -95,6 +95,12 @@
                                     Title Filter:
                                     <input type="text" v-model="titleFilter">
                                 </label>
+                                <label>
+                                    Min YOE:
+                                    <input type="number" v-model="minYOE">
+                                    Max YOE:
+                                    <input type="number" v-model="maxYOE">
+                                </label>
                             </div>
 
                             <div class="control-group ai-trigger-group">
@@ -141,8 +147,8 @@
                 <div v-if="currentSearch" class="scraper-count-list">
                     <div v-for="scraperId in Object.keys(scraperJobCounts).map(Number)" :key="scraperId"
                         class="scraper-count">
-                        <div v-if="scraperSourceToIcon[scraperId]">
-                            <img :src="scraperSourceToIcon[scraperId]" alt="" width="20" height="20">
+                        <div v-if="scraperIdToIcon[scraperId]">
+                            <img :src="scraperIdToIcon[scraperId]" alt="" width="20" height="20">
                         </div>
                         <div v-else>
                             {{ scraperIdToName[scraperId] }}:
@@ -213,7 +219,8 @@
                         <hr class="divider">
                         <div class="job-full-description" v-html="selectedJob.description"></div>
                         <div class="job-full-footer">
-                            <a v-if="selectedJob.applyLink" :href="selectedJob.applyLink" target="_blank"
+                            <a v-if="selectedJob.applyLink" :href="selectedJob.applyLink"
+                                :target="selectedJob.applyLink.startsWith('javascript:') ? '_self' : '_blank'"
                                 class="primary-button apply-large">
                                 Apply for this position
                             </a>
@@ -256,9 +263,10 @@
                                                 <span v-if="jobCard.length > 1" class="version-badge">
                                                     {{ Number(index) + 1 }} / {{ jobCard.length }}
                                                 </span>
-                                                <span v-if="scraperSourceToIcon[job.scraperSource]">
-                                                    <img :src="scraperSourceToIcon[job.scraperSource]"
-                                                        :alt="job.company" width="20" height="20">
+                                                <span v-if="scraperIdToIcon[job.scraperSource]">
+                                                    <img :src="scraperIdToIcon[job.scraperSource]"
+                                                        :alt="scraperIdToName[job.scraperSource]" width="20"
+                                                        height="20">
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
@@ -292,7 +300,8 @@
                                         <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
                                             Unsave
                                         </button>
-                                        <a v-if="job.applyLink" :href="job.applyLink" target="_blank"
+                                        <a v-if="job.applyLink" :href="job.applyLink"
+                                            :target="job.applyLink.startsWith('javascript:') ? '_self' : '_blank'"
                                             class="apply-button" @click.stop>
                                             Apply Now
                                         </a>
@@ -376,11 +385,13 @@ const showScrollUpButton = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
 const searchError = ref<string | null>(null)
 const scraperIdToName = reactive<Record<number, string>>({})
-const scraperSourceToIcon = reactive<Record<number, string>>({});
+const scraperIdToIcon = reactive<Record<number, string>>({});
 const scraperLinkTemplates = reactive<Record<number, string>>({});
 const currentSearch = ref<any>(null);
 const scraperJobCounts = ref<Record<number, number>>({});
 const lastSearchTime = ref<Date | null>(null);
+const minYOE = ref<number | null>(null);
+const maxYOE = ref<number | null>(null);
 
 let searchId: number;
 
@@ -474,6 +485,14 @@ const displayedJobs = computed(() => {
     }
     if (titleFilter.value) {
         filteredJobs = filteredJobs.filter(job => RegExp(titleFilter.value, 'i').test(job.positionTitle))
+    }
+    const minYOEVal = minYOE.value;
+    if (minYOEVal != null) {
+        filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience >= minYOEVal)
+    }
+    const maxYOEVal = maxYOE.value;
+    if (maxYOEVal != null) {
+        filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience <= maxYOEVal)
     }
     filteredJobs = getDuplicates(filteredJobs)
     const jobGroups = groupJobs(filteredJobs)
@@ -1093,7 +1112,7 @@ const loadScraperMetadataFromData = (scraperId: number, scraperData: any) => {
     scraperIdToName[scraperId] = scraperData.name;
     scraperLinkTemplates[scraperId] = scraperData.jobLinkTemplate;
     if (scraperData.icon) {
-        scraperSourceToIcon[scraperId] = scraperData.icon;
+        scraperIdToIcon[scraperId] = scraperData.icon;
     }
 }
 
@@ -1106,7 +1125,7 @@ const getJobCounts = () => {
         }
     })
     for (const scraperId of (Object.keys(scraperJobCounts.value)).map(Number)) {
-        if (!scraperIdToName[scraperId] || !scraperLinkTemplates[scraperId] || !scraperSourceToIcon[scraperId]) {
+        if (!scraperIdToName[scraperId] || !scraperLinkTemplates[scraperId] || !scraperIdToIcon[scraperId]) {
             loadScraperMetadata(scraperId);
         }
     }

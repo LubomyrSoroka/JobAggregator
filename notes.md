@@ -39,14 +39,22 @@
 - Add a copy description button?
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...)
 - reloading the page should just set view last search to true? (not sure that this is a good idea)
-- improve this: 
-    // both of these are assuming that the names are unique (which they are not necessarily. Only the ids are)
-    const scraperSourceToIcon: Record<string, string> = {};
-    const scraperLinkTemplates = ref<Record<string, string>>({})
 
 - The scraper icon does not look centered within the scraper-count css thing in ViewSearch.vue.
 - When updating things in the backend, see if you can update just one thing instead of the entire thing. E.g., if you click "save" on a job, then just update the saved status of that job instead of updating the entire jobs array.
 - Bug: when exiting from a scraper to another page (e.g., the searches page) the document title isn't appropriate.
+- Add salaries from LinkedIn. IT'S LITERALLY ITS OWN HTML ELEMENT
+- Add info about the hiring platform to the card (this should definitely only be optional though)
+- clicking run should save the search automatically from the codeeditor page.
+- Display time spent scraping
+- Is this a bug? By highlighting words from the regex thing, it makes it impossible to stack cards?
+- Creating a new scraper and running it immediately always results in error?
+- up arrow does not appear when the scrapers are processing.
+- Allow blacklisting companies. Am I just going to implment this as another regex filter?
+- Give a notification when it's done searching.
+- If a scraper has a sensitive field, like a password, then you need to ensure it's hidden...
+- Need to create a .pkg to allow people to install host.cjs and install.cjs.
+
 
 # DONE
 - Refactor AllFilters to use v-for instead of manually listing each filter.
@@ -57,3 +65,7 @@
 - Allow grouping jobs by date.
 - Can only store 5mb in localstorage. Best way around this is to just make a backend. I've never seen a job description mention IndexedDb...
 - Allow users to download the current data as JSON.
+- improve this: 
+    // both of these are assuming that the names are unique (which they are not necessarily. Only the ids are)
+    const scraperSourceToIcon: Record<string, string> = {};
+    const scraperLinkTemplates = ref<Record<string, string>>({})

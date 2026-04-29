@@ -10,7 +10,7 @@
         <input v-model="scraperName" placeholder="Enter your scraper name...">
         <div class="code-area">
             <div>Code</div>
-            <textarea v-model="code" placeholder="Enter your code here..."></textarea>
+            <textarea v-model="code" v-on:change="uploadToFile" placeholder="Enter your code here..."></textarea>
         </div>
         <div>Job URL</div>
         <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
@@ -27,8 +27,12 @@
 
         <div class="buttons">
             <button @click="saveScraper">Save</button>
+            <button @click="chooseLocalFile">Link Local File</button>
+            <button v-if="currentScraper && currentScraper.absolutePath" @click="loadLocalScraper">Reload Local
+                File</button>
             <button @click="openRunMenu">Run</button>
             <button @click="confirmDelete = true">Delete</button>
+            <button @click="enableDebugger">Enable Debugger</button>
         </div>
         <div v-if="output" class="output">
             <div>Output Count: {{ outputCount }}</div>
@@ -95,6 +99,8 @@ onMounted(async () => {
         if (currentScraper.value.icon) {
             faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
         }
+
+        await loadLocalScraper();
     }
 
     // Set value after data is loaded so we have the correct base for comparison
@@ -128,7 +134,6 @@ onBeforeRouteLeave((to, from, next) => {
 const deleteScraper = async () => {
     if (scraperId.value)
         await removeStorageObject(MY_SCRAPERS, scraperId.value);
-
 }
 
 const saveScraper = async () => {
@@ -142,8 +147,10 @@ const saveScraper = async () => {
             name: scraperName.value,
             code: code.value,
             jobLinkTemplate: jobLinkTemplate.value,
-            icon: iconValue
+            icon: iconValue,
+            absolutePath: currentScraper.value?.absolutePath || ''
         });
+        currentScraper.value = { absolutePath: currentScraper.value?.absolutePath || '' };
     }
     else {
         await updateStorageObject(MY_SCRAPERS, scraperId.value, {
@@ -152,14 +159,92 @@ const saveScraper = async () => {
             jobLinkTemplate: jobLinkTemplate.value,
             parameters: getParameterNames(),
             runInBackground: runInBackground.value,
-            icon: iconValue
+            icon: iconValue,
+            absolutePath: currentScraper.value?.absolutePath || ''
         });
     }
+
+    // Sync to local filesystem via extension native messaging
+
     originalName = scraperName.value;
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
 }
+
+const uploadToFile = async () => {
+    if (currentScraper.value?.absolutePath)
+        await sendNativeFileAction({ type: 'SAVE_FILE', name: scraperName.value, code: code.value, absolutePath: currentScraper.value?.absolutePath });
+}
+
+const sendNativeFileAction = (actionPayload: any): Promise<any> => {
+    return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+            window.removeEventListener('message', handleMessage);
+            resolve({ error: "Native messaging timeout or extension inactive" });
+        }, 10000);
+
+        const handleMessage = (event: MessageEvent) => {
+            if (event.source !== window) return;
+            if (event.data && event.data.direction === 'file-action-result-web') {
+                if (event.data.status !== 'success')
+                    resolve({ error: 'Error with native messaging...' })
+                clearTimeout(timeout);
+                window.removeEventListener('message', handleMessage);
+                resolve(event.data);
+            }
+        };
+
+        window.addEventListener('message', handleMessage);
+
+        window.postMessage({
+            type: 'file-action-event',
+            payload: actionPayload
+        }, '*');
+    });
+};
+
+const chooseLocalFile = async () => {
+    const result = await sendNativeFileAction({ type: 'CHOOSE_FILE' });
+    if (result.status === 'success' && result.absolutePath) {
+        if (!currentScraper.value) {
+            currentScraper.value = {};
+        }
+        currentScraper.value.absolutePath = result.absolutePath;
+        code.value = result.code || code.value;
+
+        if (scraperId.value) {
+            await updateStorageObject(MY_SCRAPERS, scraperId.value, {
+                ...currentScraper.value,
+                code: code.value,
+                absolutePath: currentScraper.value.absolutePath
+            });
+        }
+    } else if (result.status !== 'canceled') {
+        alert("Failed to pick file: " + (result.error || result.status));
+    }
+}
+
+const loadLocalScraper = async () => {
+    if (!scraperName.value) return;
+    const result = await sendNativeFileAction({
+        type: 'LOAD_FILE',
+        name: scraperName.value,
+        absolutePath: currentScraper.value?.absolutePath
+    });
+    if (result.status === 'success' && result.code) {
+        code.value = result.code;
+        if (scraperId.value) {
+            await updateStorageObject(MY_SCRAPERS, scraperId.value, {
+                ...currentScraper.value,
+                code: code.value
+            });
+        }
+    } else {
+        console.warn("Failed to load local file via native messaging:", result.error || result.status);
+    }
+}
+
 const getParameterNames = () => {
     const match = code.value.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
         code.value.match(/const\s+scrape\s*=\s*(?:async\s*)?\(([^)]*)\)/);
@@ -170,6 +255,17 @@ const getParameterNames = () => {
         return names;
     }
     return [];
+}
+
+const enableDebugger = () => {
+    window.postMessage({
+        type: 'enable-debugger',
+        payload: JSON.parse(JSON.stringify({
+            scraperName: scraperName.value,
+            code: code.value,
+            parameters: parameters.value
+        }))
+    }, '*');
 }
 const openRunMenu = () => {
     runMenu.value = true;
@@ -207,7 +303,6 @@ const runScraper = async (inBackground: boolean = false) => {
                     if (event.source !== window) return;
 
                     if (event.data && event.data.type === 'scraper-result-event') {
-                        console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
                         clearTimeout(timeout);
                         window.removeEventListener('message', handleMessage);
 
@@ -232,12 +327,6 @@ const runScraper = async (inBackground: boolean = false) => {
 
                 window.addEventListener('message', handleMessage);
 
-                // Dispatch the event to trigger the content script via postMessage
-                console.log("[SCRAPER-DEBUG] Sending run-scraper-event via postMessage", {
-                    scraperName: scraperName.value,
-                    parameters: getParameterNames().map(name => parameters.value[name])
-                });
-
                 window.postMessage({
                     type: 'run-scraper-event',
                     payload: {
@@ -254,6 +343,7 @@ const runScraper = async (inBackground: boolean = false) => {
         }
     } else {
         try {
+
             const scraperLoader = new Function(`
                     ${code.value}
                     return typeof scrape !== 'undefined' ? scrape : null;
