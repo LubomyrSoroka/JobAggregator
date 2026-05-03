@@ -18,7 +18,7 @@
                             <span class="results-label">Search Results</span>
                             <div class="results-badge">{{ jobCardCount }} {{ 'Job ' + (jobCardCount === 1 ? 'Card' :
                                 'Cards') }} Displayed</div>
-                            <div class="new-jobs-badge">{{ jobs.length }} {{ jobs.length === 1 ? 'Job' :
+                            <div class="new-jobs-badge">{{ filteredJobs.length }} {{ filteredJobs.length === 1 ? 'Job' :
                                 'Jobs'
                             }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
@@ -464,9 +464,7 @@ const jobCardCount = computed(() => {
     return displayedJobs.value.reduce((acc, jobGroup) => acc + jobGroup[1].length, 0)
 })
 
-const displayedJobs = computed(() => {
-    // you should only need to sort the jobs that are not getting filtered so isn't this inefficient?
-    sortJobs();
+const filteredJobs = computed(() => {
     let filteredJobs = jobs.value;
     if (savedOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.saved)
@@ -487,24 +485,36 @@ const displayedJobs = computed(() => {
         filteredJobs = filteredJobs.filter(job => RegExp(titleFilter.value, 'i').test(job.positionTitle))
     }
     const minYOEVal = minYOE.value;
-    if (minYOEVal != null) {
+    if (typeof minYOEVal === 'number') {
         filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience >= minYOEVal)
     }
     const maxYOEVal = maxYOE.value;
-    if (maxYOEVal != null) {
+    if (typeof maxYOEVal === 'number') {
         filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience <= maxYOEVal)
     }
-    filteredJobs = getDuplicates(filteredJobs)
-    const jobGroups = groupJobs(filteredJobs)
+    return filteredJobs
+})
+
+
+const displayedJobs = computed(() => {
+    // you should only need to sort the jobs that are not getting filtered so isn't this inefficient?
+    sortJobs();
+    const jobsWithNoDuplicates = getDuplicates(filteredJobs.value)
+    const jobGroups = groupJobs(jobsWithNoDuplicates)
     // Object.keys(jobGroups).forEach(key => {
     //     // if (jobGroups[key]!.length > 1) {
     //     //     sortJobs(jobGroups[key]!)
     //     // }
     // })
+
+
     const jobGroupArray = Object.entries(jobGroups).sort((a, b) => b[0].localeCompare(a[0]))
 
     return jobGroupArray;
 })
+
+
+
 
 const groupJobs = (filteredJobs: any[]) => {
     // why don't I use Date type...
@@ -1118,7 +1128,7 @@ const loadScraperMetadataFromData = (scraperId: number, scraperData: any) => {
 
 const getJobCounts = () => {
     scraperJobCounts.value = {}; // Reset counts before starting
-    jobs.value.forEach((job: any) => {
+    filteredJobs.value.forEach((job: any) => {
         const id = job.scraperSource;
         if (id) {
             scraperJobCounts.value[id] = (scraperJobCounts.value[id] || 0) + 1;
@@ -1130,6 +1140,10 @@ const getJobCounts = () => {
         }
     }
 }
+
+watch(filteredJobs, () => {
+    getJobCounts();
+}, { immediate: true });
 
 
 onMounted(async () => {

@@ -24,15 +24,19 @@
         </div>
         <img v-if="faviconUrl" :src="`https://www.google.com/s2/favicons?domain=${faviconUrl}&sz=128`"
             alt="Scraper Icon" width="32" height="32">
-
+        <div v-if="currentScraper?.absolutePath">Local File Path: {{ currentScraper.absolutePath }}</div>
         <div class="buttons">
             <button @click="saveScraper">Save</button>
-            <button @click="chooseLocalFile">Link Local File</button>
+            <button @click="chooseLocalFile">
+                {{ currentScraper?.absolutePath ? "Change Local File" : "Sync Local File" }}
+            </button>
             <button v-if="currentScraper && currentScraper.absolutePath" @click="loadLocalScraper">Reload Local
                 File</button>
             <button @click="openRunMenu">Run</button>
             <button @click="confirmDelete = true">Delete</button>
             <button @click="enableDebugger">Enable Debugger</button>
+            <!-- Security error on Firefox when trying to open this link...
+            <a href="about:debugging#/runtime/this-firefox" target="_blank">Check Debugger</a> -->
         </div>
         <div v-if="output" class="output">
             <div>Output Count: {{ outputCount }}</div>

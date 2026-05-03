@@ -68,9 +68,27 @@ npm run test:e2e -- --debug
 
 ### Lint with [ESLint](https://eslint.org/)
 
+## Expected Job Schema:
+
+```json
+{
+    "id": string, // not mandatory
+    "positionTitle": string,
+    "company": string,
+    "location": string,
+    "datePosted": string, // in mm-dd-yyyy format. You can easily get this by writing .toISOString().split("T")[0] for a Date object.
+    "salaryRange": number, // $*min_salary* - $*max_salary* or just $*salary* (if fixed). Do not write $100k. Both $100,000 and $100000 are valid salaries. (what about $100 000? don't think so, I probably need to check this). Is the dollar sign necessary before the value?
+    "salaryType": "hourly" | "weekly" | "monthly" | "yearly",
+    "description": string,
+    "applyLink": string,
+    "image": string, // a url to the image for the job
+    "website": string // the employer's website
+}
+```
+
 ## Salary Estimation Logic
 
-For consistent sorting across different salary types, JobHunter normalizes all values to a **Gross Yearly Equivalent**.
+For consistent sorting across different salary types, JobAggregator normalizes all values to a **Gross Yearly Equivalent**.
 
 ### Methodology
 - **Hourly**: Calculated as `Rate × 2080`. This assumes a standard full-time workload of 40 hours per week for 52 weeks.
@@ -80,14 +98,14 @@ For consistent sorting across different salary types, JobHunter normalizes all v
 This approach provides a uniform benchmark for comparing jobs across varying payment structures, prioritizing total earning potential. 
 
 
-### Debugging Scrapers
+## Debugging Scrapers
 
 If the scraper is running on the background, you can find a file for the scraper's code by inspecting the extension 
 For Firefox, go to about:debugging#/runtime/this-firefox and click on Inspect for the "Background Scraper" extension. Then, in the debug menu, you should find the scraper's code in the Debugger tab. The name of the file will be scraper-<scraper-name>.js.
 
 Clicking on run should also make the file appear within the browser's dev tools, however, then it may be harder to set breakpoints before hand.
 
-### Edting Scrapers
+## Edting Scrapers
 
 For easier editing, you should install the native-messaging component of this app (which requires the extension installed to use). To ensure native-messaging words, simply download native-messaging/install.cjs with node (e.g. if you are in that directory, then just write node install.cjs).
 
@@ -99,3 +117,4 @@ Without using native-messaging, the other approach would be to use an <input typ
 The obvious downside of the current approach is that it requires the user to install both the extension and native-messaging.
 
 An alternative approach would be to use window.showOpenFilePicker. But this would only work on Google Chrome (and not Firefox). But, it wouldn't require the user to install anything.
+

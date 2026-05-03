@@ -54,6 +54,7 @@
 - Give a notification when it's done searching.
 - If a scraper has a sensitive field, like a password, then you need to ensure it's hidden...
 - Need to create a .pkg to allow people to install host.cjs and install.cjs.
+- clicking on "Enable Debugger" doesn't refersh the source file if it has been changed and you've already clilcked "Enable Debugger".
 
 
 # DONE
