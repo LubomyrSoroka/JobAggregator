@@ -3,8 +3,9 @@
         <div class="stats-card">
             <h2 class="stats-title">Jobs by Years of Experience</h2>
             <div v-if="jobs.length > 0" class="chart-container">
-                <div :style="{ minWidth: chartData.minWidth }">
-                    <VueApexCharts width="100%" height="450" :options="chartData.options" :series="chartData.series">
+                <div :style="{ minWidth: yearsOfExpData.minWidth }">
+                    <VueApexCharts width="100%" height="450" :options="yearsOfExpData.options"
+                        :series="yearsOfExpData.series">
                     </VueApexCharts>
                 </div>
             </div>
@@ -44,7 +45,7 @@ const props = defineProps<{
     jobs: any[]
 }>()
 
-const chartData = computed(() => {
+const yearsOfExpData = computed(() => {
     const counts: Record<number, number> = {}
 
     // Use a Map to deduplicate by description for statistics
