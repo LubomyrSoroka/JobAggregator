@@ -1156,6 +1156,12 @@ watch(filteredJobs, () => {
 
 
 onMounted(async () => {
+    if (scrollContainer.value) {
+        scrollContainer.value.addEventListener('scroll', () => {
+            showScrollUpButton.value = (scrollContainer.value?.scrollTop || 0) > 100
+        })
+    }
+
     try {
         const urlParams = new URLSearchParams(window.location.search);
         searchId = Number(urlParams.get('search-id'));
@@ -1176,15 +1182,6 @@ onMounted(async () => {
             await executeSearch(currentSearch.value, viewSearch)
         } else {
             loading.value = false
-        }
-        if (scrollContainer.value) {
-            scrollContainer.value.addEventListener('scroll', () => {
-                if (scrollContainer.value && scrollContainer.value.scrollTop > 100) {
-                    showScrollUpButton.value = true
-                } else {
-                    showScrollUpButton.value = false
-                }
-            })
         }
     } catch (e) {
         console.error('Failed to parse search results:', e)

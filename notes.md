@@ -34,7 +34,6 @@
 - The look of the add search screen when there are no scrapers should be improved
 - When switching between scrapers on EditSearch, scroll up to the top of the parameters section.
 - Allow searching and combining multiple terms from one scraper for one search
-- Highlighting text should not trigger a click on a job card.
 - if you match the id of an existing job, then the job should use the newest description (if it's even different)
 - Add a copy description button?
 - reloading the page should just set view last search to true? (not sure that this is a good idea)
@@ -71,3 +70,4 @@
     // both of these are assuming that the names are unique (which they are not necessarily. Only the ids are)
     const scraperSourceToIcon: Record<string, string> = {};
     const scraperLinkTemplates = ref<Record<string, string>>({})
+- Highlighting text should not trigger a click on a job card.
