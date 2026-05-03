@@ -37,13 +37,10 @@
 - Highlighting text should not trigger a click on a job card.
 - if you match the id of an existing job, then the job should use the newest description (if it's even different)
 - Add a copy description button?
-- Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...)
 - reloading the page should just set view last search to true? (not sure that this is a good idea)
-
 - The scraper icon does not look centered within the scraper-count css thing in ViewSearch.vue.
 - When updating things in the backend, see if you can update just one thing instead of the entire thing. E.g., if you click "save" on a job, then just update the saved status of that job instead of updating the entire jobs array.
 - Bug: when exiting from a scraper to another page (e.g., the searches page) the document title isn't appropriate.
-- Add salaries from LinkedIn. IT'S LITERALLY ITS OWN HTML ELEMENT
 - Add info about the hiring platform to the card (this should definitely only be optional though)
 - clicking run should save the search automatically from the codeeditor page.
 - Display time spent scraping
@@ -55,6 +52,10 @@
 - If a scraper has a sensitive field, like a password, then you need to ensure it's hidden...
 - Need to create a .pkg to allow people to install host.cjs and install.cjs.
 - clicking on "Enable Debugger" doesn't refersh the source file if it has been changed and you've already clilcked "Enable Debugger".
+
+# Partially done:
+- Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
+- Add salaries from LinkedIn. IT'S LITERALLY ITS OWN HTML ELEMENT (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
 
 
 # DONE

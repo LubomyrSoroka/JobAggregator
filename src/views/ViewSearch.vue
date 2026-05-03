@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ filteredJobs.length }} {{ filteredJobs.length === 1 ? 'Job' :
                                 'Jobs'
-                                }} in total</div>
+                            }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                                }} Since Last
+                            }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                                }} </div>
+                            }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -245,7 +245,7 @@
                                 :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
 
                                 <div v-for="(job, index) in jobCard" :key="job.applyLink || index" class="job-content"
-                                    @click="openJobCard(job)" v-show="index === (jobCard.currentIndex || 0)">
+                                    @click="openJobCard(job, $event)" v-show="index === (jobCard.currentIndex || 0)">
                                     <div v-if="job.image" class="job-image">
                                         <img :src="job.image" :alt="job.company">
                                     </div>
@@ -270,7 +270,7 @@
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -606,7 +606,16 @@ const sortJobs = () => {
     })
 }
 
-const openJobCard = (job: any) => {
+const openJobCard = (job: any, e: MouseEvent) => {
+    const selection = window.getSelection();
+
+    if (selection && selection.toString().length > 0) {
+        // user was selecting text → ignore click
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+
     selectedJob.value = job
 }
 
