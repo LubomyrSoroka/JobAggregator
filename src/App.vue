@@ -78,7 +78,7 @@ import Profile from './components/Profile.vue'
 
 .app-main {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   /* Crucial for internal scrollbars in views */
   display: flex;
   flex-direction: column;

@@ -17,6 +17,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@guolao/vue-monaco-editor": "^1.6.0",
     "apexcharts": "^5.10.3",
     "lucide-vue-next": "^0.577.0",
     "pinia": "^3.0.4",

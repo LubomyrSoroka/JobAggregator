@@ -11,7 +11,8 @@ export function getExperienceNLP(text: string): { "years of experience": number 
         'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20
     }
     const numOrWord = `\\d+(?:\\.\\d+)?|${Object.keys(wordToNum).join('|')}`
-    //const numAndWord = Object.entries(wordToNum).reduce((acc, entry) => `${acc}|${entry[0]}\\s+(${entry[1]})`, '');
+    
+    // num and word is for stuff like three (3) years
     const numAndWord = Object.entries(wordToNum).map(entry => `${entry[0]}\\s+\\(${entry[1]}\\)`).join('|');
     const dashes = [
         '-', '—', '–', '−', '‒', '―',

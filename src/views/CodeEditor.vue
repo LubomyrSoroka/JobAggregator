@@ -10,7 +10,8 @@
         <input v-model="scraperName" placeholder="Enter your scraper name...">
         <div class="code-area">
             <div>Code</div>
-            <textarea v-model="code" v-on:change="uploadToFile" placeholder="Enter your code here..."></textarea>
+            <VueMonacoEditor language="javascript" v-model:value="code" @change="uploadToFile"
+                placeholder="Enter your code here..."></VueMonacoEditor>
         </div>
         <div>Job URL</div>
         <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
@@ -66,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
@@ -435,7 +437,6 @@ const runScraper = async (inBackground: boolean = false) => {
     flex-direction: column;
     gap: 10px;
     box-sizing: border-box;
-
 
 }
 

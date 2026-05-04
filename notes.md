@@ -45,12 +45,12 @@
 - Display time spent scraping
 - Is this a bug? By highlighting words from the regex thing, it makes it impossible to stack cards?
 - Creating a new scraper and running it immediately always results in error?
-- up arrow does not appear when the scrapers are processing.
 - Allow blacklisting companies. Am I just going to implment this as another regex filter?
 - Give a notification when it's done searching.
 - If a scraper has a sensitive field, like a password, then you need to ensure it's hidden...
 - Need to create a .pkg to allow people to install host.cjs and install.cjs.
 - clicking on "Enable Debugger" doesn't refersh the source file if it has been changed and you've already clilcked "Enable Debugger".
+- Problem in JobStats.vue. Some of the stats are not double counting jobs that have the exact same description, whereas other ones are.
 
 # Partially done:
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
@@ -71,3 +71,4 @@
     const scraperSourceToIcon: Record<string, string> = {};
     const scraperLinkTemplates = ref<Record<string, string>>({})
 - Highlighting text should not trigger a click on a job card.
+- up arrow does not appear when the scrapers are processing.
