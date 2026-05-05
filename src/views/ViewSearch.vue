@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ filteredJobs.length }} {{ filteredJobs.length === 1 ? 'Job' :
                                 'Jobs'
-                                }} in total</div>
+                            }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                                }} Since Last
+                            }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                                }} </div>
+                            }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -270,7 +270,7 @@
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
-                                                }}</span>
+                                                    }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -712,20 +712,26 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
     loading.value = true
     const oldJobs = (await getStorageObject(JOBS, currentSearch.id)) || [];
 
-    const getMaps = (scraperConfig: any): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any> } => {
+    const getMaps = (): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, seenJobs: Map<number, Set<string>> } => {
         const oldJobsMap = new Map<string, any>();
         const oldJobsDescriptionMap = new Map<string, any>();
+        const seenJobs = new Map<number, Set<string>>();
         jobs.value.forEach((job: any) => {
             let key = JSON.stringify(job);
+
             if (job.id) {
-                key = JSON.stringify({ id: job.id, scraperSource: scraperConfig.scraperId });
+                key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
+                if (job.scraperSource && !seenJobs.has(job.scraperSource)) {
+                    seenJobs.set(job.scraperSource, new Set<string>());
+                }
+                seenJobs.get(job.scraperSource)?.add(job.id);
             } else {
                 key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
             }
             oldJobsMap.set(key, job);
             oldJobsDescriptionMap.set(JSON.stringify({ title: job.title, company: job.company, description: job.description }), job);
         });
-        return { oldJobsMap, oldJobsDescriptionMap }
+        return { oldJobsMap, oldJobsDescriptionMap, seenJobs }
     }
 
     const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any) => {
@@ -734,7 +740,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         for (let j of job) {
             j.scraperSource = scraperConfig.scraperId;
             j.website = addHttp(j.website);
-            const isNewJob = getExisingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
+            const isNewJob = getExistingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
             if (isNewJob) {
                 // if nlp is enabled
                 runNLPOneJob(j);
@@ -755,6 +761,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         lastSearchTime.value = new Date();
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; return job; });
         getJobCounts();
+        const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
         for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
             const scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
             if (!scraperData) continue;
@@ -772,7 +779,6 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                                 reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
                             }, 60000);
 
-                            const { oldJobsMap, oldJobsDescriptionMap } = getMaps(scraperConfig);
 
                             handleMessage = (event: MessageEvent) => {
                                 // We only accept messages from ourselves
@@ -806,7 +812,8 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                                 payload: {
                                     scraperName: scraperData.name,
                                     code: code,
-                                    parameters: parameters
+                                    parameters: parameters,
+                                    seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>()
                                 }
                             }, '*');
                         });
@@ -823,7 +830,6 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                         `)();
 
                         if (typeof scraperFunction === 'function') {
-                            const { oldJobsMap, oldJobsDescriptionMap } = getMaps(scraperConfig);
 
 
                             for await (let job of scraperFunction(...parameters)) {
@@ -861,7 +867,7 @@ const saveJobs = async (searchId: number) => {
 }
 
 // returns true if the job is new, false otherwise
-const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>) => {
+const getExistingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>) => {
     let key = null;
     let hasId = false;
     if (job.id && job.scraperSource) {
@@ -898,7 +904,6 @@ const getExisingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDes
                 oldJob.fromLatestSearch = true;
                 return false;
             }
-
         }
         // why don't we check for the case that the job doesn't have an id and it's a repost?
         // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 

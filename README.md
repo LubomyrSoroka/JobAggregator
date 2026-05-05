@@ -77,14 +77,16 @@ npm run test:e2e -- --debug
     "company": string,
     "location": string,
     "datePosted": string, // in mm-dd-yyyy format. You can easily get this by writing .toISOString().split("T")[0] for a Date object.
-    "salaryRange": number, // $*min_salary* - $*max_salary* or just $*salary* (if fixed). Do not write $100k. Both $100,000 and $100000 are valid salaries. (what about $100 000? don't think so, I probably need to check this). Is the dollar sign necessary before the value?
-    "salaryType": "hourly" | "weekly" | "monthly" | "yearly",
+    "salaryRange": string, // $*min_salary* - $*max_salary* or just $*salary* (if fixed). Do not write $100k. Both $100,000 and $100000 are valid salaries. (what about $100 000? don't think so, I probably need to check this). Is the dollar sign necessary before the value?
+    "salaryType": string // must be one of the following: "hourly" | "weekly" | "monthly" | "yearly",
     "description": string,
     "applyLink": string,
     "image": string, // a url to the image for the job
-    "website": string // the employer's website
+    "website": string // the employer's website. Both of these formats would work: https//websitename.com or websitename.com.
 }
 ```
+
+The scraper code can make use of a seenIds set. You can quickly check if a job with a certain id has been seen before by using seenIds.has(id). Make sure to then yield {id: id}. The app will then be able to retrieve the existing details of the job. This functionality is particularly useful if you need to fetch more details about a job by going to the job's link, which can be time consuming. If you don't yield {id: id}, then that job will not be included wihtin the latest search.
 
 ## Salary Estimation Logic
 
