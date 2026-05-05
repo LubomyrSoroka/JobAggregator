@@ -51,6 +51,7 @@
 - Need to create a .pkg to allow people to install host.cjs and install.cjs.
 - clicking on "Enable Debugger" doesn't refersh the source file if it has been changed and you've already clilcked "Enable Debugger".
 - Problem in JobStats.vue. Some of the stats are not double counting jobs that have the exact same description, whereas other ones are.
+- If a scraper you selected gets zero results, then it should be displayed that that scraper got 0 results instead of omitting that scraper.
 
 # Partially done:
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)

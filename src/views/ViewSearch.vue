@@ -153,7 +153,8 @@
                         <div v-else>
                             {{ scraperIdToName[scraperId] }}:
                         </div>
-                        {{ scraperJobCounts[scraperId] ?? 0 }}
+                        <div style="color: green;"> {{ newScraperJobCounts[scraperId] ?? 0 }} NEW </div>
+                        <div> {{ scraperJobCounts[scraperId] ?? 0 }} Total</div>
                     </div>
                 </div>
 
@@ -253,6 +254,9 @@
                                         <img :src="`https://www.google.com/s2/favicons?domain=${job.website}&sz=128`"
                                             :alt="job.company"
                                             @error="(($event.target as HTMLImageElement).closest('.job-image') as HTMLElement)!.style.display = 'none'">
+                                    </div>
+                                    <div>
+                                        <div v-if="job.isNew" class="new-job-badge">NEW</div>
                                     </div>
                                     <div class="job-header" :class="{ 'with-image': job.image || job.website }">
                                         <div class="job-title-row">
@@ -379,7 +383,6 @@ const noReposts = ref(true)
 const relevantOnly = ref(true);
 const latestSearchOnly = ref(true)
 const showAiModal = ref(false)
-const newJobCount = ref<number>(0)
 const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
@@ -389,6 +392,7 @@ const scraperIdToIcon = reactive<Record<number, string>>({});
 const scraperLinkTemplates = reactive<Record<number, string>>({});
 const currentSearch = ref<any>(null);
 const scraperJobCounts = ref<Record<number, number>>({});
+const newScraperJobCounts = ref<Record<number, number>>({});
 const lastSearchTime = ref<Date | null>(null);
 const minYOE = ref<number | null>(null);
 const maxYOE = ref<number | null>(null);
@@ -403,6 +407,9 @@ const scrollToTop = () => {
         })
     }
 }
+const newJobCount = computed(() => {
+    return filteredJobs.value.filter(job => job.isNew).length
+})
 const irrelevantCount = computed(() => {
     return jobs.value.filter(job => !(job.isRelevantJob ?? true)).length
 })
@@ -747,6 +754,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                 j = await filterJobWithAI(j, currentSearch.filters);
                 jobs.value.push(j);
                 scraperJobCounts.value[scraperConfig.scraperId] = (scraperJobCounts.value[scraperConfig.scraperId] || 0) + 1;
+                newScraperJobCounts.value[scraperConfig.scraperId] = (newScraperJobCounts.value[scraperConfig.scraperId] || 0) + 1;
             }
         }
     }
@@ -759,7 +767,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
     }
     else {
         lastSearchTime.value = new Date();
-        jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; return job; });
+        jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
         getJobCounts();
         const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
         for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
@@ -908,7 +916,8 @@ const getExistingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDe
         // why don't we check for the case that the job doesn't have an id and it's a repost?
         // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
         job.fromLatestSearch = true;
-        ++newJobCount.value;
+        job.isNew = true;
+        //++newJobCount.value;
         return true;
     }
 }
@@ -1142,10 +1151,13 @@ const loadScraperMetadataFromData = (scraperId: number, scraperData: any) => {
 
 const getJobCounts = () => {
     scraperJobCounts.value = {}; // Reset counts before starting
+    newScraperJobCounts.value = {};
     filteredJobs.value.forEach((job: any) => {
         const id = job.scraperSource;
         if (id) {
             scraperJobCounts.value[id] = (scraperJobCounts.value[id] || 0) + 1;
+            if (job.isNew)
+                newScraperJobCounts.value[id] = (newScraperJobCounts.value[id] || 0) + 1;
         }
     })
     for (const scraperId of (Object.keys(scraperJobCounts.value)).map(Number)) {
@@ -1625,7 +1637,6 @@ onMounted(async () => {
     background: white;
     border: 1px solid #e2e8f0;
     border-radius: 16px;
-    overflow: hidden;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
@@ -1645,6 +1656,26 @@ onMounted(async () => {
     /* A slightly darker blue border to define the edge */
 }
 
+.new-job-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+    /* Amber/Gold gradient */
+    color: #78350f;
+    font-size: 12px;
+    font-weight: 900;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    z-index: 3;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15), inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
 
 .job-image {
     position: absolute;

@@ -13,6 +13,8 @@
             <VueMonacoEditor language="javascript" v-model:value="code" @change="uploadToFile"
                 placeholder="Enter your code here..."></VueMonacoEditor>
         </div>
+        <div> Notes </div>
+        <textarea v-model="notes" placeholder="Enter any notes about the scraper..."></textarea>
         <div>Job URL</div>
         <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
         <div class="run-in-background">
@@ -77,6 +79,7 @@ const code = ref('');
 const scraperName = ref('');
 const error = ref('');
 const outputCount = ref(0);
+const notes = ref('');
 const jobLinkTemplate = ref('');
 const output = ref('');
 const runMenu = ref(false);
@@ -86,6 +89,7 @@ const confirmDelete = ref(false);
 let originalCodeValue: string | undefined = undefined;
 let originalJobLinkTemplateValue: string | undefined = undefined;
 let originalRunInBackgroundValue: boolean | undefined = undefined;
+let originalNotesValue: string | undefined = undefined;
 const runInBackground = ref(false);
 const currentScraper = ref<any>(null);
 const scraperId = ref<number | null>(null);
@@ -101,6 +105,7 @@ onMounted(async () => {
         parameters.value = currentScraper.value.editor_run_args || []
         jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
         runInBackground.value = currentScraper.value.runInBackground || false
+        notes.value = currentScraper.value.notes || ''
 
         if (currentScraper.value.icon) {
             faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
@@ -114,9 +119,10 @@ onMounted(async () => {
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
+    originalNotesValue = notes.value;
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue || runInBackground.value !== originalRunInBackgroundValue) {
+        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue || runInBackground.value !== originalRunInBackgroundValue || notes.value !== originalNotesValue) {
             event.preventDefault();
             event.returnValue = '';
         }
@@ -154,6 +160,8 @@ const saveScraper = async () => {
             code: code.value,
             jobLinkTemplate: jobLinkTemplate.value,
             icon: iconValue,
+            notes: notes.value,
+            runInBackground: runInBackground.value,
             absolutePath: currentScraper.value?.absolutePath || ''
         });
         currentScraper.value = { absolutePath: currentScraper.value?.absolutePath || '' };
@@ -166,6 +174,7 @@ const saveScraper = async () => {
             parameters: getParameterNames(),
             runInBackground: runInBackground.value,
             icon: iconValue,
+            notes: notes.value,
             absolutePath: currentScraper.value?.absolutePath || ''
         });
     }
