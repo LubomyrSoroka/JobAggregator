@@ -799,6 +799,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
         getJobCounts();
         const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
+        const promises: Promise<any>[] = [];
         for (const [ index, scraperConfigs] of ([Object.values(currentSearch.publicScraperConfigs), Object.values(currentSearch.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
             for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
                 let scraperData = null;
@@ -819,13 +820,14 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                     scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
                 }
                 if (!scraperData) continue;
+                const scraperId = origin + '-' + scraperConfig.scraperId;
                 const code = scraperData.code;
                 const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
 
                 if (code) {
                     if (scraperData?.runInBackground) {
                         try {
-                            await new Promise<void>((resolve, reject) => {
+                            promises.push(new Promise<void>((resolve, reject) => {
                                 let handleMessage: (event: MessageEvent) => void;
 
                                 const timeout = setTimeout(() => {
@@ -839,8 +841,8 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                                     if (event.source !== window) return;
 
                                     if (event.data && event.data.type === 'scraper-result-event') {
+                                        if (event.data.scraperId !== scraperId) return;
                                         console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
-
                                         if (event.data.result) {
                                             // Keep the timeout alive or clear it if we trust subsequent results
                                             // For now, let's just clear it on the first result to show it's working
@@ -868,10 +870,11 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                                         code: code,
                                         parameters: parameters,
                                         // should this get a scraperId which is preceded by public or private?
-                                        seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>()
+                                        seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>(),
+                                        scraperId: scraperId
                                     }
                                 }, '*');
-                            });
+                            }));
 
                         } catch (e: any) {
                             searchError.value = `Execution Error: ${e.message}`;
@@ -886,10 +889,10 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
 
                             if (typeof scraperFunction === 'function') {
 
-
-                                for await (let job of scraperFunction(...parameters)) {
+                                promises.push((async function() { for await (let job of scraperFunction(...parameters)) {
                                     addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
-                                }
+                                } })());
+
                             }
                         } catch (e: any) {
                             console.error(`Error running scraper ${scraperData.name}:`, e);
@@ -903,6 +906,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                 }
             }
 
+        await Promise.all(promises);
         saveJobs(currentSearch.id);
         loading.value = false;
     }

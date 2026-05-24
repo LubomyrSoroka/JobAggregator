@@ -64,6 +64,9 @@ loadscrapermetadata in ViewSearch.vue is super awkward since it checks whether t
 
 - Should write tests to test the RLS policies implemented by Supabase. E.g., try to delete a scraper that is not yours using the api.
 
+- Make an architecture diagram.
+
+- For the extension in background.js, could this line cause an error since the scraperNames might not be unique? //# sourceURL=scraper-${scraperName.replace(/\s+/g, '-')}.js
 
 # Partially done:
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
