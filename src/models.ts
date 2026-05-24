@@ -18,12 +18,14 @@ export class ScraperConfig {
 export class SavedSearch {
     id: number| undefined;
     name: string;
-    scraperConfigs: Record<number, ScraperConfig>;
+    privateScraperConfigs: Record<number, ScraperConfig>;
+    publicScraperConfigs: Record<number, ScraperConfig>;
     filters: Filter[];
 
-    constructor(name: string = '', scraperConfigs: Record<number, ScraperConfig> = {}, filters: Filter[] = []) {
+    constructor(name: string = '', privateScraperConfigs: Record<number, ScraperConfig> = {}, publicScraperConfigs: Record<number, ScraperConfig> = {}, filters: Filter[] = []) {
         this.name = name;
-        this.scraperConfigs = scraperConfigs;
+        this.privateScraperConfigs = privateScraperConfigs;
+        this.publicScraperConfigs = publicScraperConfigs;
         this.filters = filters;
         this.id = undefined;
     }

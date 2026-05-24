@@ -20,14 +20,14 @@
                                 'Cards') }} Displayed</div>
                             <div class="new-jobs-badge">{{ filteredJobs.length }} {{ filteredJobs.length === 1 ? 'Job' :
                                 'Jobs'
-                            }} in total</div>
+                                }} in total</div>
                             <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
                                 newJobCount === 1 ? 'Job' : 'Jobs'
-                            }} Since Last
+                                }} Since Last
                                 Search</div>
                             <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
                                 repostCount === 1 ? 'Job' : 'Jobs'
-                            }} </div>
+                                }} </div>
                             <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
                                 {{
                                     irrelevantCount === 1 ? 'Job' : 'Jobs'
@@ -101,6 +101,7 @@
                                     Max YOE:
                                     <input type="number" v-model="maxYOE">
                                 </label>
+                                <button @click="applyFilters">Apply Filters</button>
                             </div>
 
                             <div class="control-group ai-trigger-group">
@@ -145,7 +146,7 @@
                     Job Count Per Scraper:
                 </label>
                 <div v-if="currentSearch" class="scraper-count-list">
-                    <div v-for="scraperId in Object.keys(scraperJobCounts).map(Number)" :key="scraperId"
+                    <div v-for="scraperId in Object.keys(scraperJobCounts)" :key="scraperId"
                         class="scraper-count">
                         <div v-if="scraperIdToIcon[scraperId]">
                             <img :src="scraperIdToIcon[scraperId]" alt="" width="20" height="20">
@@ -177,8 +178,7 @@
                 </div>
 
                 <div v-if="loading && jobs.length === 0" class="loading-state">
-                    <div class="loader"></div>
-                    <p>Processing results...</p>
+                    <AppLoader text="Processing results..." />
                 </div>
                 <div v-else-if="loading && jobs.length > 0" class="ai-progress-banner">
                     <div class="mini-loader"></div>
@@ -274,7 +274,7 @@
                                                 </span>
                                                 <span v-else-if="job.scraperSource" class="scraper-badge">{{
                                                     scraperIdToName[job.scraperSource]
-                                                    }}</span>
+                                                }}</span>
                                             </div>
                                         </div>
                                         <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
@@ -294,7 +294,8 @@
                                     <div v-if="job.requirementsSummary" class="job-description">
                                         {{ job.requirementsSummary }}
                                     </div>
-                                    <div v-else-if="job.description" class="job-description" v-html="job.description">
+                                    <div v-else-if="job.description" class="job-description"
+                                        v-html="removeImages(job.description)">
                                     </div>
 
                                     <div class="job-footer">
@@ -343,12 +344,15 @@ import { SavedSearch, ScraperConfig } from '../models'
 import type { ScraperParameter } from '../models'
 import AIFilters from '../components/AIFilters.vue'
 import JobStats from '../components/JobStats.vue'
+import AppLoader from '../components/AppLoader.vue'
 import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
 import Filter, { filters as defaultFilters } from '@/components/Filter'
 import { parseNumeric, calculateYearlySalary } from '@/components/salary'
 import { getStorageObject, updateStorageObject, getAllStorageObjects } from '../services/storageService'
 import { getExperienceNLP } from '../scripts/GetExperienceNLP'
 import { MY_SEARCHES, MY_SCRAPERS, JOBS, OPENAI_API_CONFIG } from '../services/storeNames'
+import { supabase } from '../../utils/supabase'
+
 
 const repostCount = ref(0);
 const viewSearch = ref(true)
@@ -374,8 +378,18 @@ const sortOrder = ref(['experience', 'salary'])
 const priorityOptions = ref([1, 2])
 const sortPriority = ref(1)
 const sortDirection = ref('asc')
+
+
 const locationFilter = ref('')
 const titleFilter = ref('')
+const minYOE = ref<number | null>(null);
+const maxYOE = ref<number | null>(null);
+
+const locationFilterActual = ref('')
+const titleFilterActual = ref('')
+const minYOEActual = ref<number | null>(null)
+const maxYOEActual = ref<number | null>(null)
+
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
@@ -387,15 +401,13 @@ const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
 const scrollContainer = ref<HTMLElement | null>(null)
 const searchError = ref<string | null>(null)
-const scraperIdToName = reactive<Record<number, string>>({})
-const scraperIdToIcon = reactive<Record<number, string>>({});
-const scraperLinkTemplates = reactive<Record<number, string>>({});
+const scraperIdToName = reactive<Record<string, string>>({})
+const scraperIdToIcon = reactive<Record<string, string>>({});
+const scraperLinkTemplates = reactive<Record<string, string>>({});
 const currentSearch = ref<any>(null);
-const scraperJobCounts = ref<Record<number, number>>({});
-const newScraperJobCounts = ref<Record<number, number>>({});
+const scraperJobCounts = ref<Record<string, number>>({});
+const newScraperJobCounts = ref<Record<string, number>>({});
 const lastSearchTime = ref<Date | null>(null);
-const minYOE = ref<number | null>(null);
-const maxYOE = ref<number | null>(null);
 
 let searchId: number;
 
@@ -471,6 +483,14 @@ const jobCardCount = computed(() => {
     return displayedJobs.value.reduce((acc, jobGroup) => acc + jobGroup[1].length, 0)
 })
 
+const applyFilters = () => {
+    locationFilterActual.value = locationFilter.value
+    titleFilterActual.value = titleFilter.value
+    minYOEActual.value = minYOE.value
+    maxYOEActual.value = maxYOE.value
+
+}
+
 const filteredJobs = computed(() => {
     let filteredJobs = jobs.value;
     if (savedOnly.value) {
@@ -485,17 +505,17 @@ const filteredJobs = computed(() => {
     if (relevantOnly.value) {
         filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
     }
-    if (locationFilter.value) {
-        filteredJobs = filteredJobs.filter(job => RegExp(locationFilter.value, 'i').test(job.location))
+    if (locationFilterActual.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(locationFilterActual.value, 'i').test(job.location))
     }
-    if (titleFilter.value) {
-        filteredJobs = filteredJobs.filter(job => RegExp(titleFilter.value, 'i').test(job.positionTitle))
+    if (titleFilterActual.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(titleFilterActual.value, 'i').test(job.positionTitle))
     }
-    const minYOEVal = minYOE.value;
+    const minYOEVal = minYOEActual.value;
     if (typeof minYOEVal === 'number') {
         filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience >= minYOEVal)
     }
-    const maxYOEVal = maxYOE.value;
+    const maxYOEVal = maxYOEActual.value;
     if (typeof maxYOEVal === 'number') {
         filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience <= maxYOEVal)
     }
@@ -554,6 +574,11 @@ const formatDate = (dateStr: string) => {
 
 const formatMoney = (val: number) => {
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const removeImages = (html: string) => {
+    if (!html) return html;
+    return html.replace(/<img[^>]*>/gi, '');
 }
 
 // assume job type is yearly
@@ -741,11 +766,15 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         return { oldJobsMap, oldJobsDescriptionMap, seenJobs }
     }
 
-    const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any) => {
+    const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any, scraperOrigin: 'public'|'private') => {
         if (!Array.isArray(job))
             job = [job];
         for (let j of job) {
-            j.scraperSource = scraperConfig.scraperId;
+
+            // it's necessary to add scraperOrigin here so that when running getJobCount, it knows if this id is from a public scraper or a private scraper.
+            // However, now the id is stored differently for the individual job as compared to the id from the scraper config.
+
+            j.scraperSource = scraperOrigin+'-'+scraperConfig.scraperId;
             j.website = addHttp(j.website);
             const isNewJob = getExistingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
             if (isNewJob) {
@@ -753,8 +782,8 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                 runNLPOneJob(j);
                 j = await filterJobWithAI(j, currentSearch.filters);
                 jobs.value.push(j);
-                scraperJobCounts.value[scraperConfig.scraperId] = (scraperJobCounts.value[scraperConfig.scraperId] || 0) + 1;
-                newScraperJobCounts.value[scraperConfig.scraperId] = (newScraperJobCounts.value[scraperConfig.scraperId] || 0) + 1;
+                scraperJobCounts.value[j.scraperSource] = (scraperJobCounts.value[j.scraperSource] || 0) + 1;
+                newScraperJobCounts.value[j.scraperSource] = (newScraperJobCounts.value[j.scraperSource] || 0) + 1;
             }
         }
     }
@@ -770,98 +799,116 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
         getJobCounts();
         const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
-        for (const scraperConfig of (Object.values(currentSearch.scraperConfigs || {}) as ScraperConfig[]).filter(config => config.enabled)) {
-            const scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
-            if (!scraperData) continue;
-            const code = scraperData.code;
-            const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
+        for (const [ index, scraperConfigs] of ([Object.values(currentSearch.publicScraperConfigs), Object.values(currentSearch.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
+            for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
+                let scraperData = null;
+                // if you're getting public scrapers, then get it from Supabase
+                const origin = index === 0 ? 'public' : 'private';
+                if (origin === 'public') {
+                    const { data, error } = await supabase
+                        .from('Public Scrapers')
+                        .select('*')
+                        .eq('id', scraperConfig.scraperId);
+                    if(data && data.length > 0){
+                        scraperData = data[0];
+                        scraperData.parameters = JSON.parse(scraperData.parameters);
+                    }
+                    else 
+                        continue;
+                } else {
+                    scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
+                }
+                if (!scraperData) continue;
+                const code = scraperData.code;
+                const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
 
-            if (code) {
-                if (scraperData?.runInBackground) {
-                    try {
-                        await new Promise<void>((resolve, reject) => {
-                            let handleMessage: (event: MessageEvent) => void;
+                if (code) {
+                    if (scraperData?.runInBackground) {
+                        try {
+                            await new Promise<void>((resolve, reject) => {
+                                let handleMessage: (event: MessageEvent) => void;
 
-                            const timeout = setTimeout(() => {
-                                window.removeEventListener('message', handleMessage);
-                                reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
-                            }, 60000);
+                                const timeout = setTimeout(() => {
+                                    window.removeEventListener('message', handleMessage);
+                                    reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
+                                }, 60000);
 
 
-                            handleMessage = (event: MessageEvent) => {
-                                // We only accept messages from ourselves
-                                if (event.source !== window) return;
+                                handleMessage = (event: MessageEvent) => {
+                                    // We only accept messages from ourselves
+                                    if (event.source !== window) return;
 
-                                if (event.data && event.data.type === 'scraper-result-event') {
-                                    console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
+                                    if (event.data && event.data.type === 'scraper-result-event') {
+                                        console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
 
-                                    if (event.data.result) {
-                                        // Keep the timeout alive or clear it if we trust subsequent results
-                                        // For now, let's just clear it on the first result to show it's working
-                                        clearTimeout(timeout);
-                                        addJob(event.data.result, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch);
-                                    }
-                                    else {
-                                        window.removeEventListener('message', handleMessage);
-                                        clearTimeout(timeout);
-                                        if (event.data.done) {
-                                            resolve();
-                                        } else {
-                                            reject(new Error(event.data.error || "Unknown background error"));
+                                        if (event.data.result) {
+                                            // Keep the timeout alive or clear it if we trust subsequent results
+                                            // For now, let's just clear it on the first result to show it's working
+                                            clearTimeout(timeout);
+                                            addJob(event.data.result, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
+                                        }
+                                        else {
+                                            window.removeEventListener('message', handleMessage);
+                                            clearTimeout(timeout);
+                                            if (event.data.done) {
+                                                resolve();
+                                            } else {
+                                                reject(new Error(event.data.error || "Unknown background error"));
+                                            }
                                         }
                                     }
-                                }
-                            };
+                                };
 
-                            window.addEventListener('message', handleMessage);
+                                window.addEventListener('message', handleMessage);
 
-                            window.postMessage({
-                                type: 'run-scraper-event',
-                                payload: {
-                                    scraperName: scraperData.name,
-                                    code: code,
-                                    parameters: parameters,
-                                    seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>()
-                                }
-                            }, '*');
-                        });
+                                window.postMessage({
+                                    type: 'run-scraper-event',
+                                    payload: {
+                                        scraperName: scraperData.name,
+                                        code: code,
+                                        parameters: parameters,
+                                        // should this get a scraperId which is preceded by public or private?
+                                        seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>()
+                                    }
+                                }, '*');
+                            });
 
-                    } catch (e: any) {
-                        searchError.value = `Execution Error: ${e.message}`;
-                    }
-                }
-                else {
-                    try {
-                        const scraperFunction = new Function(`
-                            ${code}
-                            return typeof scrape !== 'undefined' ? scrape : null;
-                        `)();
-
-                        if (typeof scraperFunction === 'function') {
-
-
-                            for await (let job of scraperFunction(...parameters)) {
-                                addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch);
-                            }
+                        } catch (e: any) {
+                            searchError.value = `Execution Error: ${e.message}`;
                         }
-                    } catch (e: any) {
-                        console.error(`Error running scraper ${scraperData.name}:`, e);
-                        if (e instanceof TypeError && e.message.includes('NetworkError')) {
-                            searchError.value = `CORS Error: The scraper for ${scraperData.name} was blocked by the website. Browser scrapers often require a CORS proxy.`;
-                        } else {
-                            searchError.value = `Error running scraper ${scraperData.name}: ${e.message || e}`;
+                    }
+                    else {
+                        try {
+                            const scraperFunction = new Function(`
+                                ${code}
+                                return typeof scrape !== 'undefined' ? scrape : null;
+                            `)();
+
+                            if (typeof scraperFunction === 'function') {
+
+
+                                for await (let job of scraperFunction(...parameters)) {
+                                    addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
+                                }
+                            }
+                        } catch (e: any) {
+                            console.error(`Error running scraper ${scraperData.name}:`, e);
+                            if (e instanceof TypeError && e.message.includes('NetworkError')) {
+                                searchError.value = `CORS Error: The scraper for ${scraperData.name} was blocked by the website. Browser scrapers often require a CORS proxy.`;
+                            } else {
+                                searchError.value = `Error running scraper ${scraperData.name}: ${e.message || e}`;
+                            }
                         }
                     }
                 }
             }
-        }
 
         saveJobs(currentSearch.id);
         loading.value = false;
     }
 }
 
-const saveJobs = async (searchId: number) => {
+async function saveJobs(searchId: number) {
     try {
         // why am I not running createStorageObject instead in case this is the first time you run it? Because you don't need the backend to supply an id for the search. 
         // you can just use the existing id of the search.
@@ -917,34 +964,67 @@ const getExistingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDe
         // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
         job.fromLatestSearch = true;
         job.isNew = true;
-        //++newJobCount.value;
         return true;
     }
 }
 
 const getDuplicates = (jobList: any[]) => {
-    const seen = new Set();
+    const seenTitleAndCompany = new Set();
+    const seenTitleAndWebsite = new Set();
+    const seenApplyLinks = new Set();
     const groupedResults: any[] = [];
+
     for (const job of jobList) {
-        if (!job || !job.description) {
+
+        if (!job || !job.positionTitle || !job.company) {
             const group: any = reactive([job]);
             group.currentIndex = 0;
             groupedResults.push(group);
             continue;
         }
 
-        const key = job.description.toString().trim();
-        if (seen.has(key)) {
-            const group = groupedResults.find(g => g[0]?.description?.toString().trim() === key);
+        let key = job.positionTitle.trim() + job.company.trim();
+        if (seenTitleAndCompany.has(key)) {
+            const group = groupedResults.find(g => g[0]?.positionTitle?.trim() + g[0]?.company?.trim() === key);
             if (group) {
                 group.push(job);
-            } else {
+            }
+            // is it possible for this here to happen?
+            else {
+                const group: any = reactive([job]);
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        }
+        else if (job.website && seenTitleAndWebsite.has(key = job.positionTitle.trim() + getDomain(job.website))) {
+            const group = groupedResults.find(g => g[0]?.positionTitle?.trim() + getDomain(g[0]?.website?.trim()) === key);
+            if (group) {
+                group.push(job);
+            }
+            // is it possible for this here to happen?
+            else {
+                const group: any = reactive([job]);
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        }
+        else if (seenApplyLinks.has(key = job.applyLink)) {
+            const group = groupedResults.find(g => g[0]?.applyLink === key);
+            if (group) {
+                group.push(job);
+            }
+            // is it possible for this here to happen?
+            else {
                 const group: any = reactive([job]);
                 group.currentIndex = 0;
                 groupedResults.push(group);
             }
         } else {
-            seen.add(key);
+            seenApplyLinks.add(job.applyLink);
+
+            if (job.website)
+                seenTitleAndWebsite.add(job.positionTitle.trim() + getDomain(job.website));
+            seenTitleAndCompany.add(job.positionTitle.trim() + job.company.trim());
             const group: any = reactive([job]);
             group.currentIndex = 0;
             groupedResults.push(group);
@@ -952,6 +1032,8 @@ const getDuplicates = (jobList: any[]) => {
     }
     return groupedResults;
 }
+
+const getDomain = (url: string) => url ? url.trim().replace(/^(https?:\/\/)?(www\.)?/, '') : url;
 
 const filterJobsWithAI = async (jobList: any[], filters: any) => {
     const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
@@ -1125,7 +1207,7 @@ const getJobLink = async (job: any) => {
     if (!job || !job.scraperSource || !job.id) return ''
     let url = scraperLinkTemplates[job.scraperSource]?.replace('{id}', job.id) || ''
     url = addHttp(url)
-    return url
+    return url;
 }
 const addHttp = (url: string) => {
     if (!url) return url;
@@ -1134,18 +1216,37 @@ const addHttp = (url: string) => {
     }
     return url
 }
-const loadScraperMetadata = async (scraperId: number) => {
-    const scraperData = await getStorageObject(MY_SCRAPERS, scraperId);
-    if (scraperData) {
-        loadScraperMetadataFromData(scraperId, scraperData);
-    }
-}
 
-const loadScraperMetadataFromData = (scraperId: number, scraperData: any) => {
-    scraperIdToName[scraperId] = scraperData.name;
-    scraperLinkTemplates[scraperId] = scraperData.jobLinkTemplate;
-    if (scraperData.icon) {
-        scraperIdToIcon[scraperId] = scraperData.icon;
+const loadScraperMetadata = async (scraperId: string|number, givenScraperOrigin: "public"|"private"|null = null) => {
+    // scraperOrigin: 0 public, 1 private
+    let scraperIdForDatabase = scraperId
+
+    let scraperIdLocal = scraperId;
+    let scraperOrigin = givenScraperOrigin
+
+    if(typeof scraperId === 'string'){
+        scraperOrigin = scraperId.startsWith('public') ? 'public' : 'private';
+        scraperIdForDatabase = Number(scraperId.replace(/((public)|(private))-/, ''));
+    }
+    else{
+        if(!givenScraperOrigin)
+            throw new Error("Scraper origin not provided.");
+        scraperIdLocal = givenScraperOrigin + '-' + scraperId;
+    }
+    let scraperData = null;
+    if(scraperOrigin === 'public'){
+        const response = await supabase.from('Public Scrapers').select('*').eq('id', scraperIdForDatabase).single();
+        scraperData = response.data;
+    }
+
+    else
+        scraperData = await getStorageObject(MY_SCRAPERS, scraperIdForDatabase);
+    if (scraperData) {
+        scraperIdToName[scraperIdLocal] = scraperData.name;
+        scraperLinkTemplates[scraperIdLocal] = scraperData.jobLinkTemplate;
+        if (scraperData.icon) {
+            scraperIdToIcon[scraperIdLocal] = scraperData.icon;
+        }
     }
 }
 
@@ -1160,7 +1261,7 @@ const getJobCounts = () => {
                 newScraperJobCounts.value[id] = (newScraperJobCounts.value[id] || 0) + 1;
         }
     })
-    for (const scraperId of (Object.keys(scraperJobCounts.value)).map(Number)) {
+    for (const scraperId of (Object.keys(scraperJobCounts.value))) {
         if (!scraperIdToName[scraperId] || !scraperLinkTemplates[scraperId] || !scraperIdToIcon[scraperId]) {
             loadScraperMetadata(scraperId);
         }
@@ -1190,11 +1291,11 @@ onMounted(async () => {
             document.title = `Search ${currentSearch.value.name}`
 
             // Pre-load all enabled scraper metadata
-            for (const config of (Object.values(currentSearch.value.scraperConfigs || {}) as any[])) {
-                if (config.enabled) {
-                    await loadScraperMetadata(config.scraperId);
+            for (const [ index, scraperConfigs] of ([Object.values(currentSearch.value.publicScraperConfigs), Object.values(currentSearch.value.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
+                for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
+                    
+                    await loadScraperMetadata(scraperConfig.scraperId, index === 0 ? 'public' : 'private');
                 }
-            }
 
             await executeSearch(currentSearch.value, viewSearch)
         } else {
@@ -1893,25 +1994,6 @@ onMounted(async () => {
     margin-bottom: 24px;
 }
 
-.loader {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
 
 .primary-button {
     background: #3b82f6;

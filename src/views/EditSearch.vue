@@ -7,8 +7,13 @@
             </div>
             <p class="menu-subtitle">Configure scrapers and filters for this search</p>
             <div class="menu-tabs">
-                <div :class="['menu-tab', { active: activeTab === 'scrapers' }]" @click="activeTab = 'scrapers'">
-                    Scrapers
+                <div :class="['menu-tab', { active: activeTab === 'scrapers' }]"
+                    @click="async () => { if (activeTab !== 'scrapers') await loadScrapers2(false); activeTab = 'scrapers' }">
+                    My Scrapers
+                </div>
+                <div :class="['menu-tab', { active: activeTab === 'public-scrapers' }]"
+                    @click="async () => { if (activeTab !== 'public-scrapers') await loadScrapers2(true); activeTab = 'public-scrapers' }">
+                    Public Scrapers
                 </div>
                 <div :class="['menu-tab', { active: activeTab === 'filters' }]" @click="activeTab = 'filters'">
                     Filters
@@ -16,14 +21,20 @@
             </div>
         </div>
         <div class="add-new-search-content">
+            <template v-if="loading">
+                <div class="scraper-items">
+                    <AppLoader text="Loading scrapers..." />
+                </div>
+            </template>
             <!-- Scrapers Tab Content -->
-            <template v-if="activeTab === 'scrapers'">
+            <template v-else-if="activeTab === 'scrapers' || activeTab === 'public-scrapers'">
                 <div class="scraper-items">
                     <div v-for="scraper in scrapersArray" :key="scraper.id"
-                        :class="['scraper-item', { 'scraper-toggle': currentScraper === scraper }]"
+                        :class="['scraper-item', { 'scraper-toggle': currentScraper?.id === scraper.id }]"
                         @click="openSearchParams(scraper.id)">
                         <input type="checkbox" v-model="enabled[scraper.id]" @click.stop="enableScraper(scraper.id)">
                         <span class="scraper-name">{{ scraper.name }}</span>
+
                     </div>
                     <div v-if="scrapersArray.length === 0" class="empty-state">
                         No scrapers found. Create one first!
@@ -62,9 +73,9 @@
 
                 <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }"
                     :to="`/view-search?search-id=${currentSearch?.id}`">
-                    <button :disabled="!Object.values(enabled).some((e: boolean) => e)"
-                        :class="['save-button', { 'disabled-button': !Object.values(enabled).some((e: boolean) => e) }]"
-                        @click="async () => { await saveSearch(); navigate(); }">Run</button>
+                    <button :disabled="![...Object.values(privateEnabled), ...Object.values(publicEnabled)].some((e: boolean) => e)"
+                        :class="['save-button', { 'disabled-button': ![...Object.values(privateEnabled), ...Object.values(publicEnabled)].some((e: boolean) => e) }]"
+                        @click="async () => {  await saveSearch(); navigate(); }">Run</button>
                 </RouterLink>
 
                 <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }" class="save-button"
@@ -92,56 +103,163 @@ import { SavedSearch, ScraperConfig } from '../models'
 import type { ScraperParameter } from '../models'
 import router from '@/router';
 import AIFilters from '../components/AIFilters.vue'
+import AppLoader from '../components/AppLoader.vue'
 import Filter, { filters as defaultFilters } from '../components/Filter.ts'
 import { getStorageObject, createStorageObject, updateStorageObject, removeStorageObject, getAllStorageObjects } from '../services/storageService'
 import { MY_SCRAPERS, MY_SEARCHES } from '../services/storeNames.ts'
+import { supabase } from '../../utils/supabase'
 
 const showConfirmDelete = ref(false);
 const scrapersArray = ref<any[]>([]);
 const scrapers = ref<Record<number, any>>({});
 const parameters = ref<ScraperParameter>({});
+
 const enabled = ref<Record<number, boolean>>({});
+const privateEnabled = ref<Record<number, boolean>>({});
+const publicEnabled = ref<Record<number, boolean>>({});
+
 const searchName = ref('');
 const currentScraper = ref<any>(null);
+
 const tempConfigs = ref<Record<number, ScraperConfig>>({});
+const privateTempConfigs = ref<Record<number, ScraperConfig>>({});
+const publicTempConfigs = ref<Record<number, ScraperConfig>>({});
+const privateScrapers = ref<any[]>([]);
+const publicScrapers = ref<any[]>([]);
+
+/*type tempConfigType = {
+  privateScrapers: Record<number, ScraperConfig>;
+  publicScrapers: Record<number, ScraperConfig>;
+};
+const tempConfigs = ref<tempConfigType>({ privateScrapers: {}, publicScrapers: {} });*/
+
 const originalName = ref('');
 const activeTab = ref('scrapers');
 const searchFilters = ref<Filter[]>(defaultFilters);
 const currentSearch = ref<SavedSearch | null>(null);
+const loading = ref(false);
 
 onMounted(async () => {
-    scrapersArray.value = await getAllStorageObjects(MY_SCRAPERS)
-    scrapers.value = Object.fromEntries(scrapersArray.value.map((s: any) => [s.id, s]));
-    const urlParams = new URLSearchParams(window.location.search);
-    const searchId = Number(urlParams.get('search-id'));
-
-    // can just make the tempconfig automatically include all scrapers. Then the rest of the code would be much cleaner...
-    scrapersArray.value.forEach((scraper: any) => {
-        tempConfigs.value[scraper.id] = new ScraperConfig(scraper.id, Object.fromEntries(scraper.parameters.map((p: string) => [p, ''])), false);
-        enabled.value[scraper.id] = false;
-    })
-
-    if (searchId) {
-        currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
-        searchName.value = currentSearch.value?.name || '';
-        originalName.value = currentSearch.value?.name || '';
-
-        Object.values(currentSearch.value?.scraperConfigs || {}).forEach((scraperConfig: ScraperConfig) => {
-            enabled.value[scraperConfig.scraperId] = scraperConfig.enabled;
-            let mappedParameters: ScraperParameter = {};
-            scrapers.value[scraperConfig.scraperId].parameters.forEach((p: string) => {
-                mappedParameters[p] = scraperConfig.parameters[p] || '';
-            });
-            const tempConfig = tempConfigs.value[scraperConfig.scraperId];
-            if (tempConfig) {
-                tempConfig.parameters = mappedParameters;
-                tempConfig.enabled = scraperConfig.enabled;
-            }
-
-        });
-    }
-    openSearchMenu();
+    // need to get the public scrapers here immediately since we need to check which are enabled to know whether the run button can be enabled/disabled.
+    // this can be run asynchronously but if they switch to public scrapers tab, it should wait for this exact request to complete.
+    // but then there would always be lag to enable the run button.
+    // but you always need to check if any from the public scrapers is enabled and should be run.
+    // but the saved values are in IndexedDB not in Supabase.
+    
+    await loadScrapers2(false, true);
 })
+
+const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
+    loading.value = true;
+    try {
+        commitCurrentScraperConfig();
+        if (isPublic) {
+            if(publicScrapers.value.length === 0){
+                const { data } = await supabase.from('Public Scrapers').select();
+                if (data) {
+                    scrapersArray.value = data;
+                }
+
+                // in Supabase, the parameters are stored as a string whereas in IndexedDB it is stored as JSON directly
+                scrapersArray.value = scrapersArray.value.map((scraper: any) => {
+                    scraper.parameters = JSON.parse(scraper.parameters);
+                    return scraper;
+                });
+
+                publicScrapers.value = scrapersArray.value;
+            }
+            else{
+                scrapersArray.value = publicScrapers.value;
+            }
+            tempConfigs.value = publicTempConfigs.value;
+            enabled.value = publicEnabled.value;
+        } else {
+            scrapersArray.value = await getAllStorageObjects(MY_SCRAPERS)
+            tempConfigs.value = privateTempConfigs.value;
+            enabled.value = privateEnabled.value;
+        }
+
+        scrapers.value = Object.fromEntries(scrapersArray.value.map((s: any) => [s.id, s]));
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchId = Number(urlParams.get('search-id'));
+
+        if(Object.keys(tempConfigs.value).length === 0){
+            scrapersArray.value.forEach((scraper: any) => {
+                tempConfigs.value[scraper.id] = new ScraperConfig(scraper.id, Object.fromEntries(scraper.parameters.map((p: string) => [p, ''])), false);
+                enabled.value[scraper.id] = false;
+            })
+
+            if (searchId) {
+                currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
+                searchName.value = currentSearch.value?.name || '';
+                originalName.value = currentSearch.value?.name || '';
+
+                if(firstRun) {
+                    // if at least one private scraper was enabled, check that this scraper was not deleted.
+                    // if(Object.values(privateEnabled.value).filter((enabled) => enabled).length > 0){
+                    //     Object.keys(privateEnabled.value).forEach((scraperId: string) => {
+                    //         if(!(Number(scraperId) in scrapers.value)){
+                    //             delete privateEnabled.value[Number(scraperId)];
+                    //             delete privateTempConfigs.value[Number(scraperId)];
+                    //         }
+                    //     });
+                    // }
+
+                    publicTempConfigs.value = currentSearch.value?.publicScraperConfigs || {};
+                    Object.values(publicTempConfigs.value).forEach((scraperConfig: ScraperConfig) => {
+                        publicEnabled.value[scraperConfig.scraperId] = scraperConfig.enabled;
+                    })
+
+                    // if at least one public scraper was enabled, then it is necessary to fetch the public scrapers to check that this scraper wasn't deleted.
+                    if(Object.values(publicEnabled.value).filter((enabled) => enabled).length > 0){
+
+                        // the idea here is that there shouldn't be any loading screen for your private scrapers which appear first.
+                        supabase.from('Public Scrapers').select().then(({data}) => {
+                            if (data) {
+                                publicScrapers.value = data;
+                            }
+
+                            // in Supabase, the parameters are stored as a string whereas in IndexedDB it is stored as JSON directly
+                            publicScrapers.value = publicScrapers.value.map((scraper: any) => {
+                                scraper.parameters = JSON.parse(scraper.parameters);
+                                return scraper;
+                            });
+
+                            Object.keys(publicEnabled.value).forEach((scraperId: string) => {
+                                if(!publicScrapers.value.some(scraper => scraper.id === Number(scraperId))){
+                                    delete publicEnabled.value[Number(scraperId)];
+                                    delete publicTempConfigs.value[Number(scraperId)];
+                                }
+                            });
+                        })
+                        
+                    }
+                }
+
+                Object.values((isPublic ? currentSearch.value?.publicScraperConfigs : currentSearch.value?.privateScraperConfigs) || {}).forEach((scraperConfig: ScraperConfig) => {
+                    if(!(scraperConfig.scraperId in scrapers.value ))
+                        return;
+                    enabled.value[scraperConfig.scraperId] = scraperConfig.enabled;
+                    let mappedParameters: ScraperParameter = {};
+                    scrapers.value[scraperConfig.scraperId].parameters.forEach((p: string) => {
+                        mappedParameters[p] = scraperConfig.parameters[p] || '';
+                    });
+                    const tempConfig = tempConfigs.value[scraperConfig.scraperId];
+                    if (tempConfig) {
+                        tempConfig.parameters = mappedParameters;
+                        tempConfig.enabled = scraperConfig.enabled;
+                    }
+                });
+
+            }
+        }
+        // this is awkward... 
+        currentScraper.value = null;
+        openSearchMenu();
+    } finally {
+        loading.value = false;
+    }
+}
 
 const enableScraper = async (scraperId: number) => {
     const config = tempConfigs.value[scraperId]
@@ -154,13 +272,13 @@ const enableScraper = async (scraperId: number) => {
     }
 }
 
+
 const openSearchMenu = () => {
     if (currentSearch.value) {
         searchName.value = currentSearch.value.name;
     } else {
         searchName.value = '';
     }
-
     // you could run this only when the user clicks on filters...
     // Initialize filters from saved search if it exists
     if (currentSearch.value && currentSearch.value.filters) {
@@ -178,7 +296,8 @@ const openSearchMenu = () => {
 }
 
 const commitCurrentScraperConfig = () => {
-    if (currentScraper.value) { // this value is true if you have previously been alterting the arguments on a different scraper. (So it will only be false when you first open the menu)
+    // this value is true if you have previously been alterting the arguments on a different scraper. (So it will only be false when you first open the menu)
+    if (currentScraper.value) { 
         const config = tempConfigs.value[currentScraper.value.id]
 
         const mappedParams: ScraperParameter = { ...parameters.value };
@@ -193,7 +312,11 @@ const commitCurrentScraperConfig = () => {
 }
 
 const openSearchParams = async (scraperId: number) => {
+
+    // save whatever you had written for the parameter values
     commitCurrentScraperConfig();
+
+    // set this other scraper to be selected
     currentScraper.value = scrapers.value[scraperId];
     const config = tempConfigs.value[scraperId]
     if (config) {
@@ -210,14 +333,31 @@ const saveSearch = async () => {
     if (!searchName.value) return;
     commitCurrentScraperConfig();
     if (!currentSearch.value || !currentSearch.value.id) {
-        currentSearch.value = new SavedSearch(searchName.value, tempConfigs.value, searchFilters.value);
+        currentSearch.value = new SavedSearch(searchName.value, publicTempConfigs.value, privateTempConfigs.value, searchFilters.value);
         // We pass id: undefined so IndexedDB generates a new auto-incremented ID
         const id = await createStorageObject(MY_SEARCHES, currentSearch.value);
         currentSearch.value.id = id;
     }
     else {
         currentSearch.value.name = searchName.value;
-        currentSearch.value.scraperConfigs = tempConfigs.value;
+
+
+        currentSearch.value.privateScraperConfigs = privateTempConfigs.value;
+
+        // this is kinda awkward. I could update getStorageObject to directly edit the needed entries within the currenSearch instead of having to retrieve it and then just upload the same thing.
+        // this isn't such a big problem when I use offline storage, though.
+        // but I would still need to read these privateTempConfigs in case something is enabled (I would want the search to run those scrapers).
+
+        if(Object.keys(publicTempConfigs.value).length === 0){
+            const savedSearch = await getStorageObject(MY_SEARCHES, currentSearch.value.id);
+            if(savedSearch) {
+                publicTempConfigs.value = savedSearch.publicScraperConfigs;
+            }
+        }
+
+        currentSearch.value.publicScraperConfigs = publicTempConfigs.value;
+
+
         currentSearch.value.filters = searchFilters.value;
         updateStorageObject(MY_SEARCHES, currentSearch.value.id, currentSearch.value);
     }
@@ -228,14 +368,6 @@ const deleteSearch = async () => {
     await removeStorageObject(MY_SEARCHES, currentSearch.value.id);
     router.push('/search');
 }
-
-// const runSearch = async (viewSearch: boolean = false) => {
-//     await saveSearch();
-//     router.push({
-//         name: 'ViewSearch',
-//         state: { searchId: currentSearch.value?.id, searchName: searchName.value, viewSearch: viewSearch }
-//     });
-// }
 
 </script>
 

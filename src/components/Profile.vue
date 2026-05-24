@@ -5,7 +5,8 @@
         </div>
         <div v-if="showProfile" class="profile-menu">
             <RouterLink to="/settings" @click="showProfile = false">Settings</RouterLink>
-            <button @click="logout">Logout</button>
+            <RouterLink v-if="!user" to="/signup" @click="showProfile = false">Sign Up/Login</RouterLink>
+
         </div>
     </div>
 </template>
@@ -16,16 +17,19 @@ import { ref, onMounted, onUnmounted, useTemplateRef } from 'vue'
 const showProfile = ref(false)
 const profileRef = useTemplateRef<HTMLElement>('profileRef')
 
+import { supabase } from '../../utils/supabase'
+import type { User } from '@supabase/supabase-js'
+const user = ref<User | null>(null)
+// when initialized, so it handles both the initial load and future changes.
+supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth Event:', event) // e.g., 'SIGNED_IN', 'SIGNED_OUT'
+    user.value = session?.user ?? null
+})
+
 const handleClickOutside = (event: MouseEvent) => {
     if (profileRef.value && !profileRef.value.contains(event.target as Node)) {
         showProfile.value = false
     }
-}
-
-const logout = () => {
-    // Add logout logic here
-    showProfile.value = false
-    console.log("Logging out...")
 }
 
 onMounted(() => {

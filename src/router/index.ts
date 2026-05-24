@@ -37,6 +37,11 @@ const router = createRouter({
       name: 'EditSearch',
       component: () => import('../views/EditSearch.vue'),
     },
+    {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('../views/Signup.vue'),
+    },
   ],
 })
 

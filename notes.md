@@ -52,6 +52,18 @@
 - clicking on "Enable Debugger" doesn't refersh the source file if it has been changed and you've already clilcked "Enable Debugger".
 - Problem in JobStats.vue. Some of the stats are not double counting jobs that have the exact same description, whereas other ones are.
 - If a scraper you selected gets zero results, then it should be displayed that that scraper got 0 results instead of omitting that scraper.
+- For a "Job" element in viewSearch (which I haven't gotten around to making yet). the name scraperSource should be renamed to scraperId. 
+
+- The way that I set the scraperSource (which of the scraperId) in addJob() in ViewSearch.vue of each job to be equal to the scraperOrigin (public or private) + the scraperId from that source is really awkward. One solution to this problem is literally storing the ids of private scrapers as private-(id_number) and of public scrapers as public-(id_number). I would need to figure out if this is possible to do while autoincrement the id on Supabase. Or you could just have private ones start with private and public ones are just a number (this is probably the best solution).
+
+Another approach is to store all of a user's scrapers on Supabase and to just have a public/private field there. But if for non-users I still store the data in indexedDB, then this problem would still persist (although there may be a way to store even non-logged user data in Supabase). The 
+
+loadscrapermetadata in ViewSearch.vue is super awkward since it checks whether the id you have been given is just a string id or a number id, and then it retrieves the number section to use it to access the data from the database.
+
+- seenids in viewsearch (which you send to the scraper on the extension) is not using the full id but only the number. Check if this is a problem.
+
+- Should write tests to test the RLS policies implemented by Supabase. E.g., try to delete a scraper that is not yours using the api.
+
 
 # Partially done:
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
@@ -73,3 +85,7 @@
     const scraperLinkTemplates = ref<Record<string, string>>({})
 - Highlighting text should not trigger a click on a job card.
 - up arrow does not appear when the scrapers are processing.
+- In the findingDuplicates function, can only group into one card if the jobs are from the same date?
+- The way I implemented the applyFilters button is not great. Firstly, some of the filters are automatically applied (the boolean ones) whereas the regex ones are only applied if you click applyFilters. Another approach was to just make applyFilters filter the jobs and then make a watch on jobs so that when a new job is added, it is automatically filtered...
+- In MyScrapers.vue, is there a better way to implement the code without the watch?
+- In ViewSearch.vue the following should be changed in getDuplicates: const group = groupedResults.find(g => g[0]?.positionTitle?.trim() + getDomain(g[0]?.website?.trim()) === key); groupedResults should be a record to allow for instant lookup.

@@ -7,36 +7,47 @@
         <div v-if="error" class="error">
             {{ error }}
         </div>
-        <input v-model="scraperName" placeholder="Enter your scraper name...">
+        <input v-model="scraperName" placeholder="Enter your scraper name..." :readOnly="isViewingPublicScraper">
         <div class="code-area">
             <div>Code</div>
             <VueMonacoEditor language="javascript" v-model:value="code" @change="uploadToFile"
-                placeholder="Enter your code here..."></VueMonacoEditor>
+                placeholder="Enter your code here..." :options="{
+                    readOnly: isViewingPublicScraper
+                }"></VueMonacoEditor>
         </div>
         <div> Notes </div>
-        <textarea v-model="notes" placeholder="Enter any notes about the scraper..."></textarea>
+        <textarea v-model="notes" placeholder="Enter any notes about the scraper..."
+            :readOnly="isViewingPublicScraper"></textarea>
         <div>Job URL</div>
-        <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}">
+        <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}"
+            :readOnly="isViewingPublicScraper">
         <div class="run-in-background">
-            <input v-model="runInBackground" type="checkbox"> Run in Background
+            <input v-model="runInBackground" type="checkbox" :disabled="isViewingPublicScraper"> Run in Background
         </div>
         <div>Scraper Icon</div>
         <!-- <input type="file" @change="handleFileUpload" accept="image/*"> -->
         <div class="icon-input-group">
-            <input type="text" v-model="faviconUrl" placeholder="Enter domain (e.g. google.com)">
+            <input type="text" v-model="faviconUrl" placeholder="Enter domain (e.g. google.com)"
+                :readOnly="isViewingPublicScraper">
         </div>
         <img v-if="faviconUrl" :src="`https://www.google.com/s2/favicons?domain=${faviconUrl}&sz=128`"
             alt="Scraper Icon" width="32" height="32">
-        <div v-if="currentScraper?.absolutePath">Local File Path: {{ currentScraper.absolutePath }}</div>
+        <button v-if="!isViewingPublicScraper && currentScraper && !currentScraper.public_id"
+            @click="publishScraper">Publish</button>
+        <button v-else-if="!isViewingPublicScraper && currentScraper && currentScraper.public_id"
+            @click="unpublishScraper">Unpublish</button>
+        <div v-if="!isViewingPublicScraper && currentScraper?.absolutePath">Local File Path: {{
+            currentScraper.absolutePath }}</div>
         <div class="buttons">
-            <button @click="saveScraper">Save</button>
-            <button @click="chooseLocalFile">
+            <button v-if="!isViewingPublicScraper" @click="saveScraper">Save</button>
+            <button v-if="!isViewingPublicScraper" @click="chooseLocalFile">
                 {{ currentScraper?.absolutePath ? "Change Local File" : "Sync Local File" }}
             </button>
-            <button v-if="currentScraper && currentScraper.absolutePath" @click="loadLocalScraper">Reload Local
+            <button v-if="!isViewingPublicScraper && currentScraper && currentScraper.absolutePath"
+                @click="loadLocalScraper">Reload Local
                 File</button>
             <button @click="openRunMenu">Run</button>
-            <button @click="confirmDelete = true">Delete</button>
+            <button v-if="!isViewingPublicScraper" @click="confirmDelete = true">Delete</button>
             <button @click="enableDebugger">Enable Debugger</button>
             <!-- Security error on Firefox when trying to open this link...
             <a href="about:debugging#/runtime/this-firefox" target="_blank">Check Debugger</a> -->
@@ -75,6 +86,7 @@ import type { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
 import { getStorageObject, updateStorageObject, createStorageObject, removeStorageObject } from '../services/storageService'
 import { MY_SCRAPERS } from '../services/storeNames'
+import { supabase } from '../../utils/supabase';
 const code = ref('');
 const scraperName = ref('');
 const error = ref('');
@@ -94,25 +106,42 @@ const runInBackground = ref(false);
 const currentScraper = ref<any>(null);
 const scraperId = ref<number | null>(null);
 const faviconUrl = ref<string>('');
+let isViewingPublicScraper = ref(false);
+
 
 onMounted(async () => {
     const urlParams = new URLSearchParams(window.location.search)
     scraperId.value = Number(urlParams.get('scraper-id')) || null
     if (scraperId.value) {
         currentScraper.value = await getStorageObject(MY_SCRAPERS, scraperId.value)
-        scraperName.value = currentScraper.value.name || ''
-        code.value = currentScraper.value.code || ''
-        parameters.value = currentScraper.value.editor_run_args || []
-        jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
-        runInBackground.value = currentScraper.value.runInBackground || false
-        notes.value = currentScraper.value.notes || ''
-
-        if (currentScraper.value.icon) {
-            faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
-        }
-
-        await loadLocalScraper();
     }
+    else if (scraperId.value = Number(urlParams.get('public-scraper-id'))) {
+        isViewingPublicScraper.value = true;
+        const { data: scrapeItems, error } = await supabase
+            .from('Public Scrapers')
+            .select('*')
+            .eq('id', scraperId.value)
+        if (scrapeItems && scrapeItems[0]) {
+            currentScraper.value = scrapeItems[0];
+        }
+    }
+    else {
+        throw new Error('No scraper id provided')
+    }
+
+    scraperName.value = currentScraper.value.name || ''
+    code.value = currentScraper.value.code || ''
+    parameters.value = currentScraper.value.editor_run_args || []
+    jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
+    runInBackground.value = currentScraper.value.runInBackground || false
+    notes.value = currentScraper.value.notes || ''
+
+    if (currentScraper.value.icon) {
+        faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
+    }
+
+    if (!isViewingPublicScraper.value)
+        await loadLocalScraper();
 
     // Set value after data is loaded so we have the correct base for comparison
     originalName = scraperName.value;
@@ -144,8 +173,10 @@ onBeforeRouteLeave((to, from, next) => {
 })
 
 const deleteScraper = async () => {
-    if (scraperId.value)
+    if (scraperId.value) {
         await removeStorageObject(MY_SCRAPERS, scraperId.value);
+
+    }
 }
 
 const saveScraper = async () => {
@@ -282,6 +313,7 @@ const enableDebugger = () => {
         }))
     }, '*');
 }
+
 const openRunMenu = () => {
     runMenu.value = true;
     const names = getParameterNames();
@@ -299,7 +331,9 @@ const runScraper = async (inBackground: boolean = false) => {
         throw new Error('Scraper ID is not defined');
     }
     currentScraper.value.editor_run_args = parameters.value;
-    await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value);
+    if (!isViewingPublicScraper.value) {
+        await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value);
+    }
 
     if (inBackground) {
         runMenu.value = false;
@@ -389,6 +423,62 @@ const runScraper = async (inBackground: boolean = false) => {
         }
     }
 }
+
+const publishScraper = async () => {
+    if (!scraperId.value) {
+        alert('Scraper ID is not defined');
+        return;
+    }
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+        alert('You are not logged in. Please log in to publish scraper.');
+        return;
+    }
+    const userId = session.session.user.id;
+    const iconValue = faviconUrl.value ? (faviconUrl.value.startsWith('http') ? faviconUrl.value : `https://www.google.com/s2/favicons?domain=${faviconUrl.value}&sz=128`) : '';
+    const { data, error } = await supabase.from('Public Scrapers').insert({
+        name: scraperName.value,
+        code: code.value,
+        jobLinkTemplate: jobLinkTemplate.value,
+        icon: iconValue,
+        notes: notes.value,
+        runInBackground: runInBackground.value,
+        user_id: userId,
+        parameters: JSON.stringify(getParameterNames())
+    }).select();
+    if (data && data[0]) {
+        currentScraper.value.public_id = data[0].id;
+    }
+    if (error) {
+        alert('Error publishing scraper: ' + error.message)
+        return
+    }
+    await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value)
+}
+
+const unpublishScraper = async () => {
+    if (!scraperId.value) {
+        alert('Scraper ID is not defined');
+        return;
+    }
+    if (!currentScraper.value.public_id) {
+        alert('Scraper is not published');
+        return;
+    }
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+        alert('You are not logged in. Please log in to publish scraper.');
+        return;
+    }
+    const { data, error } = await supabase.from('Public Scrapers').delete().eq('id', currentScraper.value.public_id)
+    if (error) {
+        alert('Error unpublishing scraper: ' + error.message)
+        return
+    }
+    currentScraper.value.public_id = null
+    await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value)
+}
+
 </script>
 
 <style scoped>
