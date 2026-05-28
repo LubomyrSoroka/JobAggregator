@@ -149,6 +149,7 @@ onMounted(async () => {
     await loadScrapers2(false, true);
 })
 
+let firstPublicCheck = true;
 const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
     loading.value = true;
     try {
@@ -171,6 +172,16 @@ const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
             else{
                 scrapersArray.value = publicScrapers.value;
             }
+            if(firstPublicCheck){
+                firstPublicCheck = false;
+                for(const scraper of scrapersArray.value){
+                    if(!(scraper.id in publicTempConfigs.value)){
+                        publicTempConfigs.value[scraper.id] = new ScraperConfig(scraper.id, Object.fromEntries(scraper.parameters.map((p: string) => [p, ''])), false);
+                        publicEnabled.value[scraper.id] = false;
+                    }
+                }
+            }
+
             tempConfigs.value = publicTempConfigs.value;
             enabled.value = publicEnabled.value;
         } else {
@@ -196,14 +207,7 @@ const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
 
                 if(firstRun) {
                     // if at least one private scraper was enabled, check that this scraper was not deleted.
-                    // if(Object.values(privateEnabled.value).filter((enabled) => enabled).length > 0){
-                    //     Object.keys(privateEnabled.value).forEach((scraperId: string) => {
-                    //         if(!(Number(scraperId) in scrapers.value)){
-                    //             delete privateEnabled.value[Number(scraperId)];
-                    //             delete privateTempConfigs.value[Number(scraperId)];
-                    //         }
-                    //     });
-                    // }
+                    // but this is taken care of when looping through the scraper configs.
 
                     publicTempConfigs.value = currentSearch.value?.publicScraperConfigs || {};
                     Object.values(publicTempConfigs.value).forEach((scraperConfig: ScraperConfig) => {
@@ -214,6 +218,7 @@ const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
                     if(Object.values(publicEnabled.value).filter((enabled) => enabled).length > 0){
 
                         // the idea here is that there shouldn't be any loading screen for your private scrapers which appear first.
+                        // should reuse this data instead of making the same request (earlier)
                         supabase.from('Public Scrapers').select().then(({data}) => {
                             if (data) {
                                 publicScrapers.value = data;
@@ -232,8 +237,8 @@ const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
                                 }
                             });
                         })
-                        
                     }
+
                 }
 
                 Object.values((isPublic ? currentSearch.value?.publicScraperConfigs : currentSearch.value?.privateScraperConfigs) || {}).forEach((scraperConfig: ScraperConfig) => {
