@@ -201,7 +201,19 @@ To solve this issue I can try to sanitize the html that is being displayed in v-
 
 The last two approaches could only steal JobAggregator data. The first approach could steal data from any website.
 
+## Duplicate and repost job posting logic
 
+To detech if the same job is posted from multiple job boards, the current checks are performed:
+- Checking if the name and company from each post are the same.
+- Checking if the name and the company website domain are the same.
+- Checking if the apply link from each post is the same.
+- Checking if the description of each post is identical.
 
+With these current checks, there are still a lot of duplicate job posts that are not detected. Common reasons include that:
+- The name of the company may be different from different job boards, e.g., "BMO" and "Bank of Montreal".
+- Company websites are frequently omited from job boards. Even if both of the jobs include the company website, they could differ (e.g., one could link to the careers page while the other links to their actual website)
+- Apply links could differ between job boards for the same job (e.g., a job posting from Indeed url could end with source=INDEED or something like that)
+- Descriptions might use different html or something.
 
+In the future, could try to just compare the words of the description and see if there is enough similarity between them.
 

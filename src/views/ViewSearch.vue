@@ -527,7 +527,7 @@ const displayedJobs = computed(() => {
     // you should only need to sort the jobs that are not getting filtered so isn't this inefficient?
     sortJobs();
     const jobsWithNoDuplicates = getDuplicates(filteredJobs.value)
-    const jobGroups = groupJobs(jobsWithNoDuplicates)
+    const jobGroups = groupJobsByDate(jobsWithNoDuplicates)
     // Object.keys(jobGroups).forEach(key => {
     //     // if (jobGroups[key]!.length > 1) {
     //     //     sortJobs(jobGroups[key]!)
@@ -543,12 +543,18 @@ const displayedJobs = computed(() => {
 
 
 
-const groupJobs = (filteredJobs: any[]) => {
+const groupJobsByDate = (filteredJobs: any[]) => {
     // why don't I use Date type...
+
     const jobGroups: Record<string, any[]> = {};
     filteredJobs.forEach(job => {
-        const datePosted = job.reduce((min: string, j: any) =>
-            j.datePosted < min ? j.datePosted : min,
+        const datePosted = job.reduce(
+            (min: string, j: any) => {
+                const dateToUse = j.datePosted ? j.datePosted : j.dateRange?.end
+                if(dateToUse == null)
+                    return min;
+                return dateToUse < min ? dateToUse : min
+            },
             '9999-12-31'
         );
         if (jobGroups[datePosted]) {
@@ -565,7 +571,10 @@ const formatDate = (dateStr: string) => {
     if (!dateStr || dateStr === '9999-12-31') return 'Unknown Date';
     try {
         const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00');
-        if (isNaN(date.getTime())) return dateStr;
+        if (isNaN(date.getTime()))
+            return dateStr;
+
+
         return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     } catch {
         return dateStr;
@@ -695,6 +704,14 @@ const getJobMeta = (job: any) => {
             isAi: job.foundThroughAI?.includes('datePosted')
         });
     }
+    else if(job.dateRange){
+        meta.push({
+            label :'Posted',
+            value: job.dateRange.start ? `${job.dateRange.start} to ${job.dateRange.end}` : `<= ${job.dateRange.end}`,
+            isAi: false,
+        })
+
+    }
 
     if (job.yearsOfExperience === 'not specified' || job.yearsOfExperience === 0 || job.yearsOfExperience) {
         const val = typeof job.yearsOfExperience === 'number' ? `${job.yearsOfExperience}y exp` : job.yearsOfExperience;
@@ -765,6 +782,22 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         });
         return { oldJobsMap, oldJobsDescriptionMap, seenJobs }
     }
+    const latestSearchDay: Record<string, string> = {};
+
+    const getLatestEndDate = (jobs: any[], scraperId: string): string | null=> {
+        if(latestSearchDay[scraperId])
+            return latestSearchDay[scraperId]
+        const res = jobs.filter(job => !job.fromLatestSearch && job.scraperSource === scraperId).reduce(
+            (prevJob: any, currJob: any) => {
+                const prevDate = prevJob.datePosted ? prevJob.datePosted : prevJob.dateRange?.end;
+                const currDate = currJob.datePosted ? currJob.datePosted : currJob.dateRange?.end;
+                return prevDate > currDate ? prevJob : currJob;
+                }, 
+            {datePosted: '1970-01-01'}
+        );
+        latestSearchDay[scraperId] = res.datePosted ? res.datePosted : res.dateRange?.end;
+        return latestSearchDay[scraperId] ?? null;
+    }
 
     const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any, scraperOrigin: 'public'|'private') => {
         if (!Array.isArray(job))
@@ -775,6 +808,17 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
             // However, now the id is stored differently for the individual job as compared to the id from the scraper config.
 
             j.scraperSource = scraperOrigin+'-'+scraperConfig.scraperId;
+
+            if(!j.datePosted){
+                const today = new Date().toISOString().split('T')[0];
+                let lastEndDate = getLatestEndDate(oldJobs, j.scraperSource)
+                if(today && j.scraperSource && lastEndDate && lastEndDate === today)
+                    j.datePosted = today;
+                // if the lastSearchDay is null, then the range should be {start: null, end: today.toISOString()} to demonstrate, that you don't how far back it could've been posted.
+                else 
+                    j.dateRange = {start: latestSearchDay[j.scraperSource], end: today};
+            }
+
             j.website = addHttp(j.website);
             const isNewJob = getExistingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
             if (isNewJob) {
@@ -795,7 +839,6 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         lastSearchTime.value = currentSearch.lastSearchTime ? new Date(currentSearch.lastSearchTime) : null;
     }
     else {
-        lastSearchTime.value = new Date();
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
         getJobCounts();
         const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
@@ -1138,6 +1181,7 @@ const filterJobsWithAI = async (jobList: any[], filters: any) => {
 
     await Promise.all(aiPromises);
 }
+
 const filterJobWithAI = async (job: any, filters: Filter[]) => {
     const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
     const openaiApiKey = openaiConfig['openai_api_key'] || ''
@@ -1213,6 +1257,7 @@ const getJobLink = async (job: any) => {
     url = addHttp(url)
     return url;
 }
+
 const addHttp = (url: string) => {
     if (!url) return url;
     if (!url.startsWith('http') && !url.startsWith('//')) {
