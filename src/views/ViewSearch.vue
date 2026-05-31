@@ -147,7 +147,7 @@
                 </label>
                 <div v-if="currentSearch" class="scraper-count-list">
                     <div v-for="scraperId in Object.keys(scraperJobCounts)" :key="scraperId"
-                        class="scraper-count">
+                        :class="stoppedScrapers.has(scraperId) ? 'scraper-count-cancelled' : scraperPromiseStatus[scraperId] === 'pending' ? 'scraper-count-loading' : 'scraper-count'">
                         <div v-if="scraperIdToIcon[scraperId]">
                             <img :src="scraperIdToIcon[scraperId]" alt="" width="20" height="20">
                         </div>
@@ -158,7 +158,12 @@
                         <div> {{ scraperJobCounts[scraperId] ?? 0 }} Total</div>
                         <AppLoader size='small' v-if="scraperPromiseStatus[scraperId] === 'pending'"/> 
                         <div v-if="scraperPromiseStatus[scraperId] !== 'pending' && completionTime[scraperId]">{{ toHMS( completionTime[scraperId] ) }}</div>
-                        <div v-else> {{toHMS( elapsed) }} </div>
+                        <div v-else>
+                             <div>{{toHMS( elapsed) }}</div>
+                             <button @click="stopScraper(scraperId)">&times;</button>
+                        </div>
+                        
+                        
                     </div>
                 </div>
 
@@ -391,6 +396,7 @@ const savedOnly = ref(false)
 const noReposts = ref(true)
 const relevantOnly = ref(true);
 const latestSearchOnly = ref(true)
+
 const showAiModal = ref(false)
 const aiFilters = ref<Filter[]>(defaultFilters)
 const showScrollUpButton = ref(false)
@@ -406,6 +412,17 @@ const scraperPromiseStatus = ref<Record<string, 'pending' | 'fulfilled' | 'rejec
 const lastSearchTime = ref<Date | null>(null);
 
 let searchId: number;
+
+const stoppedScrapers = new Set();
+
+const stopScraper = (scraperId: string) => {
+    // necessary to add to stoppedScrapers if we want the scraper to have the red background to know that it was cancelled.
+    stoppedScrapers.add(scraperId);
+    window.postMessage({
+        type: "stop-scraper",
+        scraperId: scraperId
+    })
+}
 
 const scrollToTop = () => {
     if (scrollContainer.value) {
@@ -760,6 +777,7 @@ const downloadJobs = () => {
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
 }
+
 const elapsed = ref<number>(0);
 const completionTime = ref<Record<string, number>>({}); 
 const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
@@ -839,7 +857,6 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
 
     const startTimer = () => {
         const start = performance.now();
-
         const interval = setInterval(() => {
             elapsed.value = (performance.now() - start) / 1000;
         }, 1000);
@@ -960,9 +977,13 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
 
                             if (typeof scraperFunction === 'function') {
                                 scraperPromiseStatus.value[scraperId] = 'pending';
-                                const scraperPromise = (async function() { for await (let job of scraperFunction(...parameters)) {
-                                    addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
-                                } })().then(() => {
+                                const scraperPromise = (async function () {
+                                    for await (let job of scraperFunction(...parameters)) {
+                                        if(stoppedScrapers.has(scraperId))
+                                            break;
+                                        addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
+                                    }
+                                })().then(() => {
                                     scraperPromiseStatus.value[scraperId] = 'fulfilled';
                                 }).catch((e) => {
                                     scraperPromiseStatus.value[scraperId] = 'rejected';
@@ -2399,14 +2420,22 @@ input:checked+.slider:before {
     border-radius: 12px;
 }
 
-.scraper-count {
+.scraper-count, .scraper-count-cancelled, .scraper-count-loading {
     display: flex;
     align-items: center;
     gap: 10px;
     border: 1px solid #e2e8f0;
     padding: 5px;
     border-radius: 10px;
+}
+.scraper-count{
     background-color: white;
+}
+.scraper-count-cancelled{
+    background-color: rgb(255, 118, 118);
+}
+.scraper-count-loading{
+    background-color: #f0f9ff;
 }
 
 .scraper-count-list {
