@@ -156,6 +156,9 @@
                         </div>
                         <div style="color: green;"> {{ newScraperJobCounts[scraperId] ?? 0 }} NEW </div>
                         <div> {{ scraperJobCounts[scraperId] ?? 0 }} Total</div>
+                        <AppLoader size='small' v-if="scraperPromiseStatus[scraperId] === 'pending'"/> 
+                        <div v-if="scraperPromiseStatus[scraperId] !== 'pending' && completionTime[scraperId]">{{ toHMS( completionTime[scraperId] ) }}</div>
+                        <div v-else> {{toHMS( elapsed) }} </div>
                     </div>
                 </div>
 
@@ -179,10 +182,6 @@
 
                 <div v-if="loading && jobs.length === 0" class="loading-state">
                     <AppLoader text="Processing results..." />
-                </div>
-                <div v-else-if="loading && jobs.length > 0" class="ai-progress-banner">
-                    <div class="mini-loader"></div>
-                    <p>Processing results...</p>
                 </div>
 
                 <div v-else-if="jobs.length === 0" class="empty-state">
@@ -352,6 +351,7 @@ import { getStorageObject, updateStorageObject, getAllStorageObjects } from '../
 import { getExperienceNLP } from '../scripts/GetExperienceNLP'
 import { MY_SEARCHES, MY_SCRAPERS, JOBS, OPENAI_API_CONFIG } from '../services/storeNames'
 import { supabase } from '../../utils/supabase'
+import toHMS from "../scripts/convertTime"
 
 
 const repostCount = ref(0);
@@ -385,11 +385,6 @@ const titleFilter = ref('')
 const minYOE = ref<number | null>(null);
 const maxYOE = ref<number | null>(null);
 
-const locationFilterActual = ref('')
-const titleFilterActual = ref('')
-const minYOEActual = ref<number | null>(null)
-const maxYOEActual = ref<number | null>(null)
-
 const amountFiltered = ref(0)
 const aiError = ref<string | null>(null)
 const savedOnly = ref(false)
@@ -407,6 +402,7 @@ const scraperLinkTemplates = reactive<Record<string, string>>({});
 const currentSearch = ref<any>(null);
 const scraperJobCounts = ref<Record<string, number>>({});
 const newScraperJobCounts = ref<Record<string, number>>({});
+const scraperPromiseStatus = ref<Record<string, 'pending' | 'fulfilled' | 'rejected'>>({});
 const lastSearchTime = ref<Date | null>(null);
 
 let searchId: number;
@@ -483,26 +479,40 @@ const jobCardCount = computed(() => {
     return displayedJobs.value.reduce((acc, jobGroup) => acc + jobGroup[1].length, 0)
 })
 
+
+
+
+const locationFilterActual = ref('')
+const titleFilterActual = ref('')
+const minYOEActual = ref<number | null>(null)
+const maxYOEActual = ref<number | null>(null)
+const savedActual = ref<boolean>(false)
+const noRepostsActual = ref<boolean>(true)
+const relevantOnlyActual = ref<boolean>(true)
+const latestSearchOnlyActual = ref<boolean>(true)
 const applyFilters = () => {
     locationFilterActual.value = locationFilter.value
     titleFilterActual.value = titleFilter.value
     minYOEActual.value = minYOE.value
     maxYOEActual.value = maxYOE.value
-
+    savedActual.value = savedOnly.value;
+    noRepostsActual.value = noReposts.value;
+    relevantOnlyActual.value = relevantOnly.value;
+    latestSearchOnlyActual.value = latestSearchOnly.value;
 }
 
 const filteredJobs = computed(() => {
     let filteredJobs = jobs.value;
-    if (savedOnly.value) {
+    if (savedActual.value) {
         filteredJobs = filteredJobs.filter(job => job.saved)
     }
-    if (latestSearchOnly.value) {
+    if (latestSearchOnlyActual.value) {
         filteredJobs = filteredJobs.filter(job => job.fromLatestSearch)
     }
-    if (noReposts.value) {
+    if (noRepostsActual.value) {
         filteredJobs = filteredJobs.filter(job => job.reposted == null)
     }
-    if (relevantOnly.value) {
+    if (relevantOnlyActual.value) {
         filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
     }
     if (locationFilterActual.value) {
@@ -528,12 +538,6 @@ const displayedJobs = computed(() => {
     sortJobs();
     const jobsWithNoDuplicates = getDuplicates(filteredJobs.value)
     const jobGroups = groupJobsByDate(jobsWithNoDuplicates)
-    // Object.keys(jobGroups).forEach(key => {
-    //     // if (jobGroups[key]!.length > 1) {
-    //     //     sortJobs(jobGroups[key]!)
-    //     // }
-    // })
-
 
     const jobGroupArray = Object.entries(jobGroups).sort((a, b) => b[0].localeCompare(a[0]))
 
@@ -756,7 +760,8 @@ const downloadJobs = () => {
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
 }
-
+const elapsed = ref<number>(0);
+const completionTime = ref<Record<string, number>>({}); 
 const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
     loading.value = true
     const oldJobs = (await getStorageObject(JOBS, currentSearch.id)) || [];
@@ -832,19 +837,30 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
         }
     }
 
+    const startTimer = () => {
+        const start = performance.now();
+
+        const interval = setInterval(() => {
+            elapsed.value = (performance.now() - start) / 1000;
+        }, 1000);
+        return interval;
+    }
+
     if (viewSearch || !currentSearch) {
         jobs.value = oldJobs;
         getJobCounts();
         loading.value = false;
         lastSearchTime.value = currentSearch.lastSearchTime ? new Date(currentSearch.lastSearchTime) : null;
+        completionTime.value = currentSearch.searchDurations || {};
     }
     else {
         jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
-        getJobCounts();
         const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
         const promises: Promise<any>[] = [];
+        const interval = startTimer();
         for (const [ index, scraperConfigs] of ([Object.values(currentSearch.publicScraperConfigs), Object.values(currentSearch.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
             for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
+                
                 let scraperData = null;
                 // if you're getting public scrapers, then get it from Supabase
                 const origin = index === 0 ? 'public' : 'private';
@@ -863,14 +879,17 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                     scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
                 }
                 if (!scraperData) continue;
-                const scraperId = origin + '-' + scraperConfig.scraperId;
+                const scraperId: string = origin + '-' + scraperConfig.scraperId;
+                if(!scraperJobCounts.value[scraperId])
+                    scraperJobCounts.value[scraperId] = 0;
                 const code = scraperData.code;
                 const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
 
                 if (code) {
                     if (scraperData?.runInBackground) {
                         try {
-                            promises.push(new Promise<void>((resolve, reject) => {
+                            scraperPromiseStatus.value[scraperId] = 'pending';
+                            const scraperPromise = new Promise<void>((resolve, reject) => {
                                 let handleMessage: (event: MessageEvent) => void;
 
                                 const timeout = setTimeout(() => {
@@ -917,7 +936,16 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                                         scraperId: scraperId
                                     }
                                 }, '*');
-                            }));
+                            }).then(() => {
+                                scraperPromiseStatus.value[scraperId] = 'fulfilled';
+                            }).catch((e) => {
+                                scraperPromiseStatus.value[scraperId] = 'rejected';
+                                throw e;
+                            }).finally(() => {
+                                completionTime.value[scraperId] = elapsed.value;
+                            });
+
+                            promises.push(scraperPromise);
 
                         } catch (e: any) {
                             searchError.value = `Execution Error: ${e.message}`;
@@ -931,10 +959,18 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                             `)();
 
                             if (typeof scraperFunction === 'function') {
-
-                                promises.push((async function() { for await (let job of scraperFunction(...parameters)) {
+                                scraperPromiseStatus.value[scraperId] = 'pending';
+                                const scraperPromise = (async function() { for await (let job of scraperFunction(...parameters)) {
                                     addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
-                                } })());
+                                } })().then(() => {
+                                    scraperPromiseStatus.value[scraperId] = 'fulfilled';
+                                }).catch((e) => {
+                                    scraperPromiseStatus.value[scraperId] = 'rejected';
+                                    throw e;
+                                }).finally(() => {
+                                    completionTime.value[scraperId] = elapsed.value;
+                                });
+                                promises.push(scraperPromise);
 
                             }
                         } catch (e: any) {
@@ -950,6 +986,7 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
             }
 
         await Promise.all(promises);
+        clearInterval(interval);
         saveJobs(currentSearch.id);
         loading.value = false;
     }
@@ -960,7 +997,7 @@ async function saveJobs(searchId: number) {
         // why am I not running createStorageObject instead in case this is the first time you run it? Because you don't need the backend to supply an id for the search. 
         // you can just use the existing id of the search.
         await updateStorageObject(JOBS, searchId, jobs.value);
-        await updateStorageObject(MY_SEARCHES, searchId, { ...currentSearch.value, lastSearchTime: lastSearchTime.value });
+        await updateStorageObject(MY_SEARCHES, searchId, { ...currentSearch.value, lastSearchTime: lastSearchTime.value, searchDurations: { ...completionTime.value } });
         console.log("Saved", jobs.value.length, "jobs to storage");
     } catch (e: any) {
         console.error("Failed to save jobs to storage:", e);
@@ -1300,8 +1337,15 @@ const loadScraperMetadata = async (scraperId: string|number, givenScraperOrigin:
 }
 
 const getJobCounts = () => {
-    scraperJobCounts.value = {}; // Reset counts before starting
-    newScraperJobCounts.value = {};
+    // this first line is probelmatic and it makes the invidual scraper loaders disappear every time you add a new job?
+    // to fix this, make getJobCounts only count when you modify the filters in any way.
+    //scraperJobCounts.value = {}; // Reset counts before starting
+    Object.keys(scraperJobCounts.value).forEach(key => {
+        scraperJobCounts.value[key] = 0;
+    })
+    Object.keys(newScraperJobCounts.value).forEach(key => {
+        newScraperJobCounts.value[key] = 0;
+    })
     filteredJobs.value.forEach((job: any) => {
         const id = job.scraperSource;
         if (id) {

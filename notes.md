@@ -68,6 +68,8 @@ loadscrapermetadata in ViewSearch.vue is super awkward since it checks whether t
 
 - For the extension in background.js, could this line cause an error since the scraperNames might not be unique? //# sourceURL=scraper-${scraperName.replace(/\s+/g, '-')}.js
 
+- The timer is omitting one second from the last scraper to complete.
+
 # Partially done:
 - Improve LinkedIn Scraper (apply should go to the apply link from the Linked Page and not just the LinkedIn page itself. Getting website of the company would require going to the company info page...) (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
 - Add salaries from LinkedIn. IT'S LITERALLY ITS OWN HTML ELEMENT (Note: using this approach requires the user to be logged in to their LinkedIn and you could get warning messages from LinkedIn.)
