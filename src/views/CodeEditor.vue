@@ -40,6 +40,7 @@
             currentScraper.absolutePath }}</div>
         <div class="buttons">
             <button v-if="!isViewingPublicScraper" @click="saveScraper">Save</button>
+            <SaveMessage ref="saveMessageRef" message="Scraper saved successfully!" />
             <button v-if="!isViewingPublicScraper" @click="chooseLocalFile">
                 {{ currentScraper?.absolutePath ? "Change Local File" : "Sync Local File" }}
             </button>
@@ -87,6 +88,8 @@ import { onBeforeRouteLeave } from 'vue-router'
 import { getStorageObject, updateStorageObject, createStorageObject, removeStorageObject } from '../services/storageService'
 import { MY_SCRAPERS } from '../services/storeNames'
 import { supabase } from '../../utils/supabase';
+import SaveMessage from "../components/SaveMessage.vue";
+
 const code = ref('');
 const scraperName = ref('');
 const error = ref('');
@@ -107,6 +110,7 @@ const currentScraper = ref<any>(null);
 const scraperId = ref<number | null>(null);
 const faviconUrl = ref<string>('');
 let isViewingPublicScraper = ref(false);
+const saveMessageRef = ref<any>(null);
 
 
 onMounted(async () => {
@@ -216,6 +220,9 @@ const saveScraper = async () => {
     originalCodeValue = code.value;
     originalJobLinkTemplateValue = jobLinkTemplate.value;
     originalRunInBackgroundValue = runInBackground.value;
+    if (saveMessageRef.value) {
+        saveMessageRef.value.show();
+    }
 }
 
 const uploadToFile = async () => {

@@ -2,7 +2,7 @@
     <div class="run-menu">
         <div class="search-header">
             <div class="header-info">
-                <span class="header-tag">{{ originalName === '' ? 'New Search' : 'Editing Search' }}</span>
+                <span class="header-tag">{{ newSearch ? 'New Search' : 'Editing Search' }}</span>
                 <input type="text" class="search-name-input" placeholder="Name your search..." v-model="searchName">
             </div>
             <p class="menu-subtitle">Configure scrapers and filters for this search</p>
@@ -22,34 +22,36 @@
         </div>
         <div class="add-new-search-content">
             <template v-if="loading">
-                <div class="scraper-items">
+                <div class="empty-state">
                     <AppLoader text="Loading scrapers..." />
                 </div>
             </template>
             <!-- Scrapers Tab Content -->
             <template v-else-if="activeTab === 'scrapers' || activeTab === 'public-scrapers'">
-                <div class="scraper-items">
-                    <div v-for="scraper in scrapersArray" :key="scraper.id"
-                        :class="['scraper-item', { 'scraper-toggle': currentScraper?.id === scraper.id }]"
-                        @click="openSearchParams(scraper.id)">
-                        <input type="checkbox" v-model="enabled[scraper.id]" @click.stop="enableScraper(scraper.id)">
-                        <span class="scraper-name">{{ scraper.name }}</span>
-
-                    </div>
-                    <div v-if="scrapersArray.length === 0" class="empty-state">
-                        No scrapers found. Create one first!
-                    </div>
+                <div v-if="scrapersArray.length === 0" class="empty-state">
+                    No scrapers found. Create one or check out some public scrapers.
                 </div>
-                <div class="search-config-area">
-                    <div class="search-config-scroll">
-                        <div class="search-params">
-                            <div class="form-group" v-for="(value, name) in parameters" :key="name">
-                                <label>{{ name }}</label>
-                                <input type="text" v-model="parameters[name]">
+                <template v-else>
+                    <div class="scraper-items">
+                        <div v-for="scraper in scrapersArray" :key="scraper.id"
+                            :class="['scraper-item', { 'scraper-toggle': currentScraper?.id === scraper.id }]"
+                            @click="openSearchParams(scraper.id)">
+                            <input type="checkbox" v-model="enabled[scraper.id]" @click.stop="enableScraper(scraper.id)">
+                            <span class="scraper-name">{{ scraper.name }}</span>
+
+                        </div>
+                    </div>
+                    <div class="search-config-area">
+                        <div class="search-config-scroll">
+                            <div class="search-params">
+                                <div class="form-group" v-for="(value, name) in parameters" :key="name">
+                                    <label>{{ name }}</label>
+                                    <input type="text" v-model="parameters[name]">
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </template>
             </template>
 
             <!-- Filters Tab Content -->
@@ -68,17 +70,18 @@
             <div class="search-actions">
                 <button :class="['save-button', { 'disabled-button': searchName === '' }]" @click="saveSearch">Save
                     Search</button>
-                <button v-if="originalName !== ''" class="save-button" @click="showConfirmDelete = true">Delete
+                <SaveMessage ref="saveMessageRef" message="Search saved successfully!"/>
+                <button v-if="!newSearch" class="save-button" @click="showConfirmDelete = true">Delete
                     Search</button>
 
-                <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }"
+                <RouterLink custom v-slot="{ navigate }"
                     :to="`/view-search?search-id=${currentSearch?.id}`">
                     <button :disabled="![...Object.values(privateEnabled), ...Object.values(publicEnabled)].some((e: boolean) => e)"
-                        :class="['save-button', { 'disabled-button': ![...Object.values(privateEnabled), ...Object.values(publicEnabled)].some((e: boolean) => e) }]"
-                        @click="async () => {  await saveSearch(); navigate(); }">Run</button>
+                        :class="['save-button', { 'disabled-button': (![...Object.values(privateEnabled), ...Object.values(publicEnabled)].some((e: boolean) => e) )||searchName === ''}]"
+                        @click="async () => {  await saveSearch(); navigate(); }">Run & Save</button>
                 </RouterLink>
 
-                <RouterLink v-if="originalName !== ''" custom v-slot="{ navigate }" class="save-button"
+                <RouterLink v-if="!newSearch" custom v-slot="{ navigate }" class="save-button"
                     :to="`/view-search?search-id=${currentSearch?.id}&last-search=true`">
                     <button @click="navigate">View Last Search</button>
                 </RouterLink>
@@ -91,7 +94,9 @@
             <p>Are you sure you want to delete this search?</p>
             <div class='confirm-delete-buttons'>
                 <button class='cancel-button' @click='showConfirmDelete = false'>Cancel</button>
-                <button class='delete-button' @click='deleteSearch'>Delete</button>
+                <RouterLink v-slot="{ navigate }" custom :to="`/search`">
+                    <button class='delete-button' @click='async () => { await deleteSearch(); navigate(); }'>Delete</button>
+                </RouterLink>
             </div>
         </div>
     </div>
@@ -104,12 +109,14 @@ import type { ScraperParameter } from '../models'
 import router from '@/router';
 import AIFilters from '../components/AIFilters.vue'
 import AppLoader from '../components/AppLoader.vue'
+import SaveMessage from '../components/SaveMessage.vue'
 import Filter, { filters as defaultFilters } from '../components/Filter.ts'
 import { getStorageObject, createStorageObject, updateStorageObject, removeStorageObject, getAllStorageObjects } from '../services/storageService'
 import { MY_SCRAPERS, MY_SEARCHES } from '../services/storeNames.ts'
 import { supabase } from '../../utils/supabase'
 
 const showConfirmDelete = ref(false);
+const saveMessageRef = ref<any>(null);
 const scrapersArray = ref<any[]>([]);
 const scrapers = ref<Record<number, any>>({});
 const parameters = ref<ScraperParameter>({});
@@ -133,7 +140,7 @@ const publicScrapers = ref<any[]>([]);
 };
 const tempConfigs = ref<tempConfigType>({ privateScrapers: {}, publicScrapers: {} });*/
 
-const originalName = ref('');
+const newSearch = ref(true);
 const activeTab = ref('scrapers');
 const searchFilters = ref<Filter[]>(defaultFilters);
 const currentSearch = ref<SavedSearch | null>(null);
@@ -203,7 +210,7 @@ const loadScrapers2 = async (isPublic: boolean, firstRun: boolean = false) => {
             if (searchId) {
                 currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
                 searchName.value = currentSearch.value?.name || '';
-                originalName.value = currentSearch.value?.name || '';
+                newSearch.value = false;
 
                 if(firstRun) {
                     // if at least one private scraper was enabled, check that this scraper was not deleted.
@@ -279,10 +286,12 @@ const enableScraper = async (scraperId: number) => {
 
 
 const openSearchMenu = () => {
-    if (currentSearch.value) {
-        searchName.value = currentSearch.value.name;
-    } else {
-        searchName.value = '';
+    if(!searchName.value){
+        if (currentSearch.value) {
+            searchName.value = currentSearch.value.name;
+        } else {
+            searchName.value = '';
+        }
     }
     // you could run this only when the user clicks on filters...
     // Initialize filters from saved search if it exists
@@ -317,7 +326,6 @@ const commitCurrentScraperConfig = () => {
 }
 
 const openSearchParams = async (scraperId: number) => {
-
     // save whatever you had written for the parameter values
     commitCurrentScraperConfig();
 
@@ -338,10 +346,11 @@ const saveSearch = async () => {
     if (!searchName.value) return;
     commitCurrentScraperConfig();
     if (!currentSearch.value || !currentSearch.value.id) {
-        currentSearch.value = new SavedSearch(searchName.value, publicTempConfigs.value, privateTempConfigs.value, searchFilters.value);
+        currentSearch.value = new SavedSearch(searchName.value, privateTempConfigs.value, publicTempConfigs.value, searchFilters.value);
         // We pass id: undefined so IndexedDB generates a new auto-incremented ID
         const id = await createStorageObject(MY_SEARCHES, currentSearch.value);
         currentSearch.value.id = id;
+        newSearch.value = false;
     }
     else {
         currentSearch.value.name = searchName.value;
@@ -366,12 +375,15 @@ const saveSearch = async () => {
         currentSearch.value.filters = searchFilters.value;
         updateStorageObject(MY_SEARCHES, currentSearch.value.id, currentSearch.value);
     }
+    
+    if (saveMessageRef.value) {
+        saveMessageRef.value.show();
+    }
 }
 
 const deleteSearch = async () => {
     if (!currentSearch.value || !currentSearch.value.id) return;
     await removeStorageObject(MY_SEARCHES, currentSearch.value.id);
-    router.push('/search');
 }
 
 </script>
@@ -528,12 +540,10 @@ const deleteSearch = async () => {
 }
 
 .empty-state {
+    margin: auto;
     text-align: center;
     padding: 40px;
-    color: #888;
-    background: #f9f9f9;
-    border-radius: 12px;
-    border: 1px dashed #ccc;
+    font-size: 24px;
 }
 
 .search-config-area {
