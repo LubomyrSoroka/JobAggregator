@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@200..900&display=swap');
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    .document-container,
+    .document-container * {
+        visibility: visible;
+    }
+
+    .document-container {
+        display: block !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        padding: 0;
+        margin: 0;
+    }
+
+    .document {
+        border: none !important;
+        margin: 0 !important;
+        page-break-after: always;
+        break-after: page;
+    }
+
+    html, body {
+        margin: 0;
+        padding: 0;
+    }
+
+    @page {
+        margin: 0;
+        size: letter;
+    }
+}
+
+:root {
+    /* --accent-color: rgb(32 78 139); */
+    --accent-color: rgb(0 79 144);
+}
+
+/* .document-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 20px 0;
+} */
+
+.document {
+    font-family: "Source Sans 3", "Calibri", sans-serif;
+    width: 8.5in;
+    height: 11in;
+    margin: 0 auto;
+    border: 1px solid #000;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.document-container {
+    /* calibri isn't the same font. Compare the capital R letter for example. */
+    font-family: "Source Sans 3", "Calibri", sans-serif;
+    /* width: 8.5in; */
+    /* border: 1px solid #000; */
+    /* width: 100vw;
+    height: 100vh; */
+    padding: 0;
+    font-size: 10pt;
+    text-align: justify;
+    hyphens: auto;
+    line-height: 0.6;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: white;
+}
+
+.margins{
+    padding: 0.7in 0.7in 0 0.7in;
+}
+
+/* html,
+body {
+    margin: 0;
+} */
+
+.top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 0.6;
+}
+
+/* This controls the gap between the icon and the text */
+.icon-group {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+}
+
+
+.name {
+    font-weight: bold;
+    font-size: 30pt;
+    margin-bottom: 0.7cm;
+}
+
+.element-group {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    /* column-gap: 0.1cm; */
+    align-items: start;
+    break-inside: avoid;
+    line-height: 1.2;
+}
+
+/* .element-group {
+    display: flex;
+    justify-content: space-between;
+} */
+
+.elements, .bullet-elements {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    /* font-size: 10pt; */
+    /* this is the same as entries.side_space in the yaml file */
+    margin-left: 0.2cm;
+    margin-right: 0.2cm;
+    margin-top: 0.3cm;
+    margin-bottom: 0.5cm;
+    /* gap: 100px; */
+}
+.bullet-elements{
+    gap: 0.3em;
+}
+.elements{
+    gap: 1.2em;
+}
+
+.date-section {
+    display: flex;
+    flex-direction: row;
+}
+
+
+.icons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    /* I just randomly chose 90% here... which might be okay. But would I prefer max four elements per row? */
+    width: 90%;
+    /* column-gap is the horizontal disatnce between elements, whereas row-gap is vertical distance */
+    /* in rendercv, i can see the the horizontal distance (column-gap) is 0.5cm, but I don't know whta the exact row-gap is */
+    row-gap: 0.3cm;
+    column-gap: 0.5cm;
+    color: var(--accent-color);
+    margin-bottom: 0.7cm;
+}
+
+h1,
+h2 {
+    color: var(--accent-color);
+}
+
+h1 {
+    margin: 0;
+}
+
+h2 {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 1.4em;
+    line-height: 0.6;
+}
+
+h2::after {
+    content: "";
+    flex: 1;
+    border-bottom: 0.5pt solid var(--accent-color);
+}
+
+h3 {
+    font-weight: normal;
+    margin: 0;
+    font-size: 10pt;
+}
+
+.headline {
+    color: var(--accent-color);
+    margin-bottom: 0.7cm;
+    font-size: 10pt;
+}
+
+.element-title {
+    font-weight: bold;
+}
+
+a {
+    text-decoration: none;
+    color: var(--accent-color);
+}
+
+.separator-line {
+    flex: 1;
+    border-bottom: 0.5pt solid var(--accent-color);
+}
+
+.location-and-date {
+    text-align: right;
+    width: 4.15cm;
+    /* border: 1px solid #000; */
+}
+
+/* .highlights-list {
+    list-style-position: inside;
+    margin: 0 0 0 0.15cm;
+    padding: 0;
+} */
+
+/* li::marker {
+    font-size: 0.8em;
+    color: rgb(0, 0, 0);
+} */
+
+.highlights-list {
+    list-style: none;
+    margin: 0 0 0 0.15cm;
+    padding: 0;
+}
+
+li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    /* space between bullet and text */
+    /* line-height: 1.2; */
+}
+
+/* custom bullet */
+li::before {
+    content: "•";
+    flex-shrink: 0;
+    color: rgb(0, 0, 0);
+    /* line-height: 1; */
+    /* top: 0.15em; */
+    /* vertical alignment tweak */
+    /* text-align: justify;
+    hyphens: auto; */
+}
+
+.education-element{
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+.institution-area-and-highlights{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
