@@ -11,6 +11,7 @@ export interface StorageProvider {
     create(storeName: string, value: any): Promise<number>;
     update(storeName: string, key: string | number, value: any): Promise<void>;
     getAll(storeName: string): Promise<any[]>;
+    getAllObjects(storeName: string): Promise<Record<string, any>>;
     remove(storeName: string, key: string | number): Promise<void>;
 }
 
@@ -117,12 +118,61 @@ const getAllIDBValues = (storeName: string): Promise<any> => {
     });
 };
 
+const getAllIDBEntriesAsObject = (storeName: string): Promise<Record<string, any>> => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => upgradeStrategy(request);
+        request.onerror = () => reject(request.error);
+
+        request.onsuccess = () => {
+            const db = request.result;
+            const transaction = db.transaction(storeName, 'readonly');
+            const store = transaction.objectStore(storeName);
+
+            const keysRequest = store.getAllKeys();
+            const valuesRequest = store.getAll();
+
+            let keys: IDBValidKey[] | null = null;
+            let values: any[] | null = null;
+
+            const tryResolve = () => {
+                if (!keys || !values) return;
+
+                const resolvedValues = values;
+                const result: Record<string, any> = {};
+
+
+                keys.forEach((key, index) => {
+                    result[String(key)] = resolvedValues[index];
+                });
+
+                resolve(result);
+            };
+
+            keysRequest.onerror = () => reject(keysRequest.error);
+            valuesRequest.onerror = () => reject(valuesRequest.error);
+
+            keysRequest.onsuccess = () => {
+                keys = keysRequest.result;
+                tryResolve();
+            };
+
+            valuesRequest.onsuccess = () => {
+                values = valuesRequest.result;
+                tryResolve();
+            };
+        };
+    });
+};
+
 const indexedDBProvider: StorageProvider = {
     get: getIDBValue,
     create: createIDBValue,
     update: updateIDBValue,
     remove: removeIDBValue,
-    getAll: getAllIDBValues
+    getAll: getAllIDBValues,
+    getAllObjects: getAllIDBEntriesAsObject
 };
 
 // Toggle this to switch between providers!
@@ -172,6 +222,12 @@ export async function getAllStorageObjects(storeName: string): Promise<any> {
     return await storage.getAll(storeName);
 }
 
+/**
+ * Helper to get all objects from storage as an object.
+ */
+export async function getAllStorageObjectsAsObject(storeName: string): Promise<any> {
+    return await storage.getAllObjects(storeName);
+}
 /**
  * Ensures data is a plain object by stripping Vue reactivity wrappers.
  */

@@ -102,6 +102,7 @@
         <div v-else>
             <input type="file" @change="handleFileUpload" accept=".yaml">
         </div>
+        <ResumeChat v-if="yamlText" :resume="yamlText" :jobDescription="''" ></ResumeChat>
     </div>
 </template>
 
@@ -112,6 +113,9 @@ import { computed, ref, type ComputedRef } from 'vue';
 import YAML from 'yaml'; // npm install yaml
 import { nextTick } from 'vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
+
+import ResumeChat from '../components/ResumeChat.vue'
+
 // 1. Read and parse the YAML
 const yamlText = ref<string>('');
 function getField(data: any, key: keyof CVData) {

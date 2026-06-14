@@ -23,7 +23,7 @@
 
 <script lang="ts" setup>
 import { ref, onMounted } from 'vue'
-import { getAllStorageObjects, updateStorageObject } from '../services/storageService'
+import { getAllStorageObjectsAsObject, updateStorageObject} from '../services/storageService'
 import { OPENAI_API_CONFIG } from '../services/storeNames'
 
 const openaiApiKey = ref('')
@@ -31,9 +31,7 @@ const endPoint = ref('')
 const model = ref('')
 
 onMounted(async () => {
-    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG)
-    JSON.parse(openaiConfig)
-
+    const openaiConfig = await getAllStorageObjectsAsObject(OPENAI_API_CONFIG)
     openaiApiKey.value = openaiConfig['openai_api_key'] || ''
     endPoint.value = openaiConfig['end_point'] || ''
     model.value = openaiConfig['model'] || ''
