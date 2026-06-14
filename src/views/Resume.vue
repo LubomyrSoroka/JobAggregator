@@ -1,10 +1,13 @@
 <template>
     <div class="idk">
-        <div v-if="yamlText" class="editor-section">
+        <div v-if="yamlText" ref="editorSection" class="editor-section" :style="{ flexBasis: editorBasis }">
             <VueMonacoEditor v-model:value="yamlText" language="yaml" height="100%" />
             <button @click="saveYaml">Save</button>
         </div>
-        <div v-if="transformedData" class="preview-section">
+        <div class="separator-bar" @mousedown="onSeparatorMouseDown">
+            <div class="separator-grip"></div>
+        </div>
+        <div v-if="transformedData" ref="previewSection" class="preview-section" :style="{ flexBasis: previewBasis }">
             <!-- Hidden template source used by Vue to render changes, and by splitCVIntoPages to read from -->
             <div ref="templateSource" class="document-container template-source">
                 <div class ="margins">
@@ -117,6 +120,63 @@ function getField(data: any, key: keyof CVData) {
 const transformedData = ref<TransformedCVData | null>(null);
 const templateSource = ref<HTMLElement | null>(null);
 const outputContainer = ref<HTMLElement | null>(null);
+const editorSection = ref<HTMLElement | null>(null);
+const previewSection = ref<HTMLElement | null>(null);
+
+// --- Drag-to-resize logic ---
+const editorBasis = ref<string>('50%');
+const previewBasis = ref<string>('50%');
+let isDragging = false;
+let startX = 0;
+let startEditorWidth = 0;
+let startPreviewWidth = 0;
+
+const onSeparatorMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    isDragging = true;
+    startX = e.clientX;
+    startEditorWidth = editorSection.value?.getBoundingClientRect().width ?? 0;
+    startPreviewWidth = previewSection.value?.getBoundingClientRect().width ?? 0;
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+};
+
+const onMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    const delta = e.clientX - startX;
+    const totalWidth = startEditorWidth + startPreviewWidth;
+    const minWidth = 100; // minimum panel width in px
+
+    let newEditorWidth = startEditorWidth + delta;
+    let newPreviewWidth = startPreviewWidth - delta;
+
+    // Clamp
+    if (newEditorWidth < minWidth) {
+        newEditorWidth = minWidth;
+        newPreviewWidth = totalWidth - minWidth;
+    }
+    if (newPreviewWidth < minWidth) {
+        newPreviewWidth = minWidth;
+        newEditorWidth = totalWidth - minWidth;
+    }
+
+    editorBasis.value = `${newEditorWidth}px`;
+    previewBasis.value = `${newPreviewWidth}px`;
+
+    // Re-scale the preview after resize
+    scalePreview();
+};
+
+const onMouseUp = () => {
+    isDragging = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+};
 
 const handleFileUpload = (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -137,6 +197,8 @@ const handleFileUpload = (event: Event) => {
             await nextTick(); // 👈 wait for DOM to update
 
             splitCVIntoPages();
+            await nextTick();
+            scalePreview();
         };
         reader.readAsText(file);
     }
@@ -147,6 +209,8 @@ const saveYaml = async () =>{
     transformedData.value = getTransformedData();
     await nextTick(); // 👈 wait for DOM to update
     splitCVIntoPages();
+    await nextTick();
+    scalePreview();
 }
 // const file = fs.readFileSync('/Users/lubomyrsoroka/Desktop/Projects/generate html cv/Lubomyr_Soroka_CV.yaml', 'utf8');
 // const parsedYaml = YAML.parse(file);
@@ -342,6 +406,23 @@ const splitCVIntoPages = () => {
     }
 };
 
+const scalePreview = () => {
+    const preview = document.querySelector('.preview-section') as HTMLElement;
+    const page = document.querySelector('.document') as HTMLElement;
+
+    if (!preview || !page) return;
+
+    const availableWidth = preview.clientWidth - 40; // padding
+    const scale = Math.min(1, availableWidth / page.offsetWidth);
+
+    outputContainer.value!.style.transform = `scale(${scale})`;
+    outputContainer.value!.style.transformOrigin = 'top center';
+
+    // // compensate for scaled height
+    // outputContainer.value!.style.width = `${page.offsetWidth}px`;
+    // outputContainer.value!.style.height =
+    //     `${outputContainer.value!.scrollHeight * scale}px`;
+};
 
 
 </script>
@@ -359,13 +440,38 @@ const splitCVIntoPages = () => {
             overflow: hidden;
       }  
       .editor-section {
-            flex: 1 ;
+            flex: 1 1 50%;
+            min-width: 100px;
             height: 100%;
+            overflow: hidden;
+      }
+      .separator-bar {
+            flex: 0 0 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: col-resize;
+            background: #e5e7eb;
+            border-radius: 3px;
+            transition: background 0.15s;
+      }
+      .separator-bar:hover,
+      .separator-bar:active {
+            background: #bfc5ce;
+      }
+      .separator-grip {
+            width: 2px;
+            height: 32px;
+            border-left: 1px solid #9ca3af;
+            border-right: 1px solid #9ca3af;
+            gap: 2px;
       }
       .preview-section {
-            flex: 1;
+            flex: 1 1 50%;
+            min-width: 100px;
             height: 100%;
             overflow-y: auto;
+            overflow-x: hidden;
             background-color: #f3f4f6;
             padding: 20px;
             display: flex;
