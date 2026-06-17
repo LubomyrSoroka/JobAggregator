@@ -16,7 +16,7 @@ export interface StorageProvider {
 }
 
 const DB_NAME = 'JobAggregatorDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const upgradeStrategy = (request: IDBOpenDBRequest) => {
     const db = request.result;

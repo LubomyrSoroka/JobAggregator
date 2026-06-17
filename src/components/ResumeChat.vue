@@ -84,13 +84,6 @@
         display: flex;
     }
 
-    /* .message-input,
-    .message-output {
-        max-width: 70%;
-        word-break: break-word;
-        overflow-wrap: anywhere;
-    } */
-
     .message-input{
         border: 1px solid grey;
         box-shadow: 3px 3px grey;
@@ -101,7 +94,6 @@
         border-radius: 5px 5px 0px 5px;
     }
 
-
     .chat-container{
         flex: 1;
         display: flex;
@@ -111,6 +103,7 @@
         border: 1px solid black;
         padding: 20px;
     }
+
     .output{
         flex: 1;
         overflow-y: auto;

@@ -236,6 +236,11 @@
                             <a v-if="selectedJobLink" class="primary-button" :href="selectedJobLink" target="_blank">
                                 View Job on Original Site
                             </a>
+                            <RouterLink
+                                :to="`/resume?jobId=${selectedJob.id}&searchId=${searchId}`" class="primary-button"
+                            >
+                                Tailor My Resume
+                            </RouterLink>
 
                         </div>
                     </div>
@@ -1753,7 +1758,6 @@ onMounted(async () => {
 }
 
 .apply-large {
-    width: 100%;
     padding: 18px !important;
     font-size: 18px !important;
     text-align: center;
