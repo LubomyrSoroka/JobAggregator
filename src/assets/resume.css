@@ -38,10 +38,6 @@
     }
 }
 
-:root {
-    /* --accent-color: rgb(32 78 139); */
-    --accent-color: rgb(0 79 144);
-}
 
 /* .document-container {
     display: flex;
@@ -64,6 +60,7 @@
 .document-container {
     /* calibri isn't the same font. Compare the capital R letter for example. */
     font-family: "Source Sans 3", "Calibri", sans-serif;
+    --accent-color: rgb(0 79 144);
     /* width: 8.5in; */
     /* border: 1px solid #000; */
     /* width: 100vw;
@@ -105,10 +102,10 @@ body {
 }
 
 
-.name {
+.document-container .name {
     font-weight: bold;
     font-size: 30pt;
-    margin-bottom: 0.7cm;
+    margin: 0 0 0.7cm;
 }
 
 .element-group {
@@ -164,16 +161,16 @@ body {
     margin-bottom: 0.7cm;
 }
 
-h1,
-h2 {
+.document-container h1,
+.document-container h2 {
     color: var(--accent-color);
 }
 
-h1 {
+.document-container h1 {
     margin: 0;
 }
 
-h2 {
+.document-container h2 {
     margin: 0;
     display: flex;
     align-items: baseline;
@@ -182,13 +179,13 @@ h2 {
     line-height: 0.6;
 }
 
-h2::after {
+.document-container h2::after {
     content: "";
     flex: 1;
     border-bottom: 0.5pt solid var(--accent-color);
 }
 
-h3 {
+.document-container h3 {
     font-weight: normal;
     margin: 0;
     font-size: 10pt;
@@ -204,7 +201,7 @@ h3 {
     font-weight: bold;
 }
 
-a {
+.document-container a {
     text-decoration: none;
     color: var(--accent-color);
 }
@@ -237,7 +234,7 @@ a {
     padding: 0;
 }
 
-li {
+.document-container li {
     display: flex;
     align-items: flex-start;
     gap: 0.5em;
@@ -246,7 +243,7 @@ li {
 }
 
 /* custom bullet */
-li::before {
+.document-container li::before {
     content: "•";
     flex-shrink: 0;
     color: rgb(0, 0, 0);

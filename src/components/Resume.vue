@@ -4,6 +4,7 @@
     <div ref="templateSource" class="document-container template-source">
         <div class ="margins">
             <div class="top">
+                <!-- this should be h1 but it breaks if I change it... -->
                 <h1 class="name">{{transformedData.name}}</h1>
                 <div v-if="transformedData.headline" class="headline"> {{transformedData.headline}} </div>
                 <div class="icons">
@@ -280,6 +281,7 @@ const scalePreview = () => {
 </script>
 
 <style src="../assets/resume.css"></style>
+
 <style >
     .template-source {
         position: absolute;
