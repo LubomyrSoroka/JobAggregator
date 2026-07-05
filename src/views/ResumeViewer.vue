@@ -22,13 +22,19 @@
             </div>
         </div>
         <div class="side-by-side" >
-            <ResumeChat v-if="yamlText" :resume="yamlText" :jobDescription="jobDescription" ></ResumeChat>
+            <ResumeChat v-if="yamlText && jobId" :resume="yamlText" :jobDescription="jobDescription" :jobId="jobId"></ResumeChat>
             <div v-if="jobDescription" class="job-description">
                 <h2>Job Description</h2>
                 <div v-html="jobDescription"></div>
             </div>
         </div>
+        <a v-if="jobApplyLink" :href="jobApplyLink"
+            :target="jobApplyLink.startsWith('javascript:') ? '_self' : '_blank'"
+            class="primary-button apply-large">
+            Apply for this position
+        </a>
     </div>
+
 </template>
 
 
@@ -64,6 +70,7 @@ let newFile = false;
 let jobId = ref<string|null>('');
 const filename = ref<string>('');
 const jobCompany = ref<string>('');
+const jobApplyLink = ref<string>('');
 
 const handleMessage = (event: MessageEvent) => {
     if (event.data && event.data.type === 'pdf-data-result-web') {
@@ -98,6 +105,7 @@ onMounted(async () => {
         const job = jobs.find((job: any) => job.id === jobId.value);
         jobDescription.value = job?.description;
         jobCompany.value = job?.company;
+        jobApplyLink.value = job?.applyLink;
         filename.value = `Resume_${yamlText.value ? YAML.parse(yamlText.value).cv.name : ''}_${jobCompany.value}`.replace(/\s/g, '_');
 
     }
