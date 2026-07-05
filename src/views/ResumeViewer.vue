@@ -1,5 +1,6 @@
 <template>
     <div class="window">
+        <SaveMessage ref="saveMessageRef" :message="`Resume ${filename} saved successfully!`"/>
         <div class="side-by-side">
             <div v-if="yamlText" ref="editorSection" class="editor-section" :style="{ flexBasis: editorBasis }">
                 <VueMonacoEditor v-model:value="yamlText" language="yaml" style="flex: 1"/>
@@ -11,6 +12,10 @@
             <div v-if="transformedData" ref="previewSection" class="preview-section" :style="{ flexBasis: previewBasis }">
                 <Resume ref="resume" :transformedData="transformedData"></Resume>
                 <button @click="downloadPDF">Download PDF</button>
+                <div  v-if="isChrome">
+                    <button @click="savePDF">Save PDF</button>
+                    Filename: <input v-model="filename">
+                </div>
             </div>
             <div v-else>
                 <input type="file" @change="handleFileUpload" accept=".yaml">
@@ -28,10 +33,11 @@
 
 
 <script lang="ts" setup>
+import SaveMessage from '../components/SaveMessage.vue'
 import { loadIcon } from '@iconify/vue'
 import { ref} from 'vue';
 import YAML from 'yaml'; // npm install yaml
-import { nextTick, onMounted } from 'vue';
+import { nextTick, onMounted, onUnmounted } from 'vue';
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
 import { getStorageObject, updateStorageObject } from '@/services/storageService.ts';
 import { JOBS, RESUMES } from '@/services/storeNames.ts';
@@ -39,11 +45,37 @@ import ResumeChat from '../components/ResumeChat.vue'
 import type { CVData, Icons, TransformedCVData } from '@/components/Resume.vue';
 import Resume from '@/components/Resume.vue';
 
+import { computed } from "vue";
+
+const isChrome = computed(() => {
+  const ua = navigator.userAgent;
+
+  return (
+    ua.includes("Chrome") &&
+    !ua.includes("Edg") &&   // Edge also says Chrome
+    !ua.includes("OPR") &&   // Opera also says Chrome
+    !ua.includes("Firefox")
+  );
+});
+
+const saveMessageRef = ref<any>(null);
 let jobDescription = ref('');
 let newFile = false;
 let jobId = ref<string|null>('');
+const filename = ref<string>('');
+const jobCompany = ref<string>('');
+
+const handleMessage = (event: MessageEvent) => {
+    if (event.data && event.data.type === 'pdf-data-result-web') {
+        if (saveMessageRef.value && event.data.status === 'success') {
+            saveMessageRef.value.show();
+        }
+    }
+};
 
 onMounted(async () => {
+    window.addEventListener('message', handleMessage);
+
     const urlParams = new URLSearchParams(window.location.search);
     jobId.value = urlParams.get('jobId');
     const searchId = Number(urlParams.get('searchId'));
@@ -60,13 +92,21 @@ onMounted(async () => {
         displayPDF(true);
     }
     newFile = !yamlText.value;
+
     if(jobId.value && searchId){
         const jobs = await getStorageObject(JOBS, searchId);
         const job = jobs.find((job: any) => job.id === jobId.value);
         jobDescription.value = job?.description;
+        jobCompany.value = job?.company;
+        filename.value = `Resume_${yamlText.value ? YAML.parse(yamlText.value).cv.name : ''}_${jobCompany.value}`.replace(/\s/g, '_');
+
     }
 
 })
+
+onUnmounted(() => {
+    window.removeEventListener('message', handleMessage);
+});
 
 // 1. Read and parse the YAML
 const yamlText = ref<string>('');
@@ -138,6 +178,7 @@ const handleFileUpload = (event: Event) => {
         reader.onload = async (e) => {
             yamlText.value = e.target?.result as string;
             displayPDF(true);
+            filename.value = `Resume_${yamlText.value ? YAML.parse(yamlText.value).cv.name : ''}_${jobCompany.value}`.replace(/\s/g, '_');
         };
         reader.readAsText(file);
     }
@@ -206,8 +247,9 @@ const getTransformedData = (): TransformedCVData | null => {
 const downloadPDF = () => {
     window.print();
 }
-
-
+const savePDF = () => {
+    window.postMessage({type: 'get-pdf-data', filename: filename.value});
+}
 
 </script>
 
