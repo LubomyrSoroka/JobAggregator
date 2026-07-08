@@ -1,0 +1,2481 @@
+<template>
+    <div class="view-content-centered" ref="scrollContainer">
+        <div class="view-search-container">
+            <header class="view-header">
+                <div class="back-button" @click="$router.push('/search')">
+                    <span class="icon">←</span> Back to Searches
+                </div>
+                <div class="tabs">
+                    <div @click="viewSearch = true" :class="viewSearch ? 'selected' : 'not-selected'">Search Results
+                    </div>
+                    <div @click="viewSearch = false" :class="!viewSearch ? 'selected' : 'not-selected'">Stats</div>
+                </div>
+            </header>
+            <div v-if="viewSearch">
+                <div class="control-panel">
+                    <div class="panel-main">
+                        <div class="results-info">
+                            <span class="results-label">Search Results</span>
+                            <div class="results-badge">{{ jobCardCount }} {{ 'Job ' + (jobCardCount === 1 ? 'Card' :
+                                'Cards') }} Displayed</div>
+                            <div class="new-jobs-badge">{{ filteredJobs.length }} {{ filteredJobs.length === 1 ? 'Job' :
+                                'Jobs'
+                                }} in total</div>
+                            <div v-if="newJobCount !== null" class="new-jobs-badge">{{ newJobCount }} New {{
+                                newJobCount === 1 ? 'Job' : 'Jobs'
+                                }} Since Last
+                                Search</div>
+                            <div v-if="repostCount !== null" class="new-jobs-badge">{{ repostCount }} Reposted {{
+                                repostCount === 1 ? 'Job' : 'Jobs'
+                                }} </div>
+                            <div v-if="irrelevantCount !== null" class="new-jobs-badge">{{ irrelevantCount }} Irrelevant
+                                {{
+                                    irrelevantCount === 1 ? 'Job' : 'Jobs'
+                                }} Found
+                            </div>
+                            <div v-if="lastSearchTime != null" class="new-jobs-badge">Last Search: {{
+                                lastSearchTime.toLocaleString('en-US', {
+                                    month: 'long', day: 'numeric', year: 'numeric',
+                                    hour: 'numeric', minute: '2-digit', hour12: true
+                                }) }}</div>
+                        </div>
+
+                        <div class="panel-actions">
+                            <div class="control-group sort-group">
+                                <span class="control-label">Sort By</span>
+                                <div class="select-wrapper">
+                                    <select v-model="sortDirection" @change="sortJobs" class="styled-select direction">
+                                        <option value="asc">↑ Asc</option>
+                                        <option value="desc">↓ Desc</option>
+                                    </select>
+                                    <select v-model="sortPriority" @change="sortJobs" class="styled-select priority">
+                                        <option v-for="p in priorityOptions" :value="p">P{{ p }}</option>
+                                    </select>
+                                    <select v-model="sortOrder[sortPriority - 1]" @change="sortJobs"
+                                        class="styled-select target">
+                                        <option v-for="option in sortOptions" :value="option">{{ option }}</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="control-group filter-group">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="savedOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Saved Only
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="latestSearchOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Latest Search Only
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="noReposts">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        No Reposts
+                                    </span>
+                                </label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="relevantOnly">
+                                    <span class="slider"></span>
+                                    <span class="toggle-label">
+                                        Relevant Only
+                                    </span>
+                                </label>
+                                <label>
+                                    Location Filter:
+                                    <input type="text" v-model="locationFilter">
+                                </label>
+                                <label>
+                                    Title Filter:
+                                    <input type="text" v-model="titleFilter">
+                                </label>
+                                <label>
+                                    Min YOE:
+                                    <input type="number" v-model="minYOE">
+                                    Max YOE:
+                                    <input type="number" v-model="maxYOE">
+                                </label>
+                                <button @click="applyFilters">Apply Filters</button>
+                            </div>
+
+                            <div class="control-group ai-trigger-group">
+                                <button @click="showAiModal = true" class="ai-trigger-button">
+                                    AI Enhancer
+                                </button>
+                                <button @click="runNLP" class="ai-trigger-button">
+                                    Run NLP
+                                </button>
+                            </div>
+                        </div>
+                        <div class="download">
+                            <button @click="downloadJobs" class="download-button">
+                                Download JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Modal -->
+                <div v-if="showAiModal" class="ai-modal">
+                    <div class="close" @click="showAiModal = false">✕</div>
+                    <div class="search-header">
+                        <div class="header-info">
+                            <span class="header-tag">AI Enhancements</span>
+                            <h2 class="modal-title">Tune Search with AI</h2>
+                        </div>
+                    </div>
+
+                    <div class="ai-modal-content">
+                        <AIFilters :filters="aiFilters" id-prefix="view-modal" />
+
+                        <button class="primary-button ai-run-button large"
+                            @click="() => { runAI(); showAiModal = false; }"
+                            :disabled="aiFiltering || aiFilters.every((filter: Filter) => !filter.value)">
+                            <span v-if="aiFiltering" class="inline-loader"></span>
+                            {{ aiFiltering ? 'Processing...' : 'Run AI Analysis' }}
+                        </button>
+                    </div>
+                </div>
+                <label>
+                    Job Count Per Scraper:
+                </label>
+                <div v-if="currentSearch" class="scraper-count-list">
+                    <button @click="deselectedScrapers = new Set()"> Select All </button>
+                    <button @click="deselectedScrapers = new Set(Object.keys(scraperJobCounts))"> Deselect All </button>
+                    <div v-for="scraperId in Object.keys(scraperJobCounts)" :key="scraperId"
+                        :class="stoppedScrapers.has(scraperId) ? 'scraper-count-cancelled' : scraperPromiseStatus[scraperId] === 'pending' ? 'scraper-count-loading' : 'scraper-count'">
+                        <input
+                            type="checkbox"
+                            :checked="!deselectedScrapers.has(scraperId)"
+                            @change="e => {
+                                const checked = (e.target as HTMLInputElement).checked;
+                                if (checked) {
+                                    deselectedScrapers.delete(scraperId);
+                                } else {
+                                    deselectedScrapers.add(scraperId);
+                                }
+                            }"
+                            />
+                        <div v-if="scraperIdToIcon[scraperId]">
+                            <img :src="scraperIdToIcon[scraperId]" alt="" width="20" height="20">
+                        </div>
+                        <div v-else>
+                            {{ scraperIdToName[scraperId] }}:
+                        </div>
+                        <div style="color: green;"> {{ newScraperJobCounts[scraperId] ?? 0 }} NEW </div>
+                        <div> {{ scraperJobCounts[scraperId] ?? 0 }} Total</div>
+                        <AppLoader size='small' v-if="scraperPromiseStatus[scraperId] === 'pending'"/> 
+                        <div v-if="scraperPromiseStatus[scraperId] !== 'pending' && completionTime[scraperId]">{{ toHMS( completionTime[scraperId] ) }}</div>
+                        <div v-else>
+                             <div>{{toHMS( elapsed) }}</div>
+                             <button @click="stopScraper(scraperId)">&times;</button>
+                        </div>
+                        
+                        
+                    </div>
+                </div>
+
+                <div v-if="aiFiltering" class="ai-progress-banner">
+                    <div class="mini-loader"></div>
+                    <span>AI is enhancing your results with missing data... Filtering Job: {{ amountFiltered }}/{{
+                        displayedJobs.length }}</span>
+                </div>
+
+                <div v-if="aiError" class="ai-error-banner">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-message">{{ aiError }}</span>
+                    <button class="close-error" @click="aiError = null">✕</button>
+                </div>
+
+                <div v-if="searchError" class="ai-error-banner">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-message">{{ searchError }}</span>
+                    <button class="close-error" @click="searchError = null">✕</button>
+                </div>
+
+                <div v-if="loading && jobs.length === 0" class="loading-state">
+                    <AppLoader text="Processing results..." />
+                </div>
+
+                <div v-else-if="jobs.length === 0" class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <h2>No jobs found</h2>
+                    <p>Try adjusting your search parameters or enabling more scrapers.</p>
+                    <button class="primary-button" @click="$router.push('/search')">Go Back</button>
+                </div>
+
+                <!-- Job Details Sidebar Overlay -->
+                <div v-if="selectedJob" class="job-overlay" @click="closeJobCard"></div>
+                <div :class="['job-full', { 'active': selectedJob }]">
+                    <div v-if="selectedJob" class="job-full-content">
+                        <button class="close-sidebar" @click="closeJobCard">✕</button>
+                        <div class="job-icon">
+                            <span v-if="scraperIdToIcon[selectedJob.scraperSource]">
+                                <img :src="scraperIdToIcon[selectedJob.scraperSource]"
+                                    :alt="scraperIdToName[selectedJob.scraperSource]" width="30"
+                                    height="30">
+                            </span>
+                            <span v-else-if="selectedJob.scraperSource" class="scraper-badge">{{
+                                scraperIdToName[selectedJob.scraperSource]
+                            }}</span>
+                        </div>
+                        <div class="job-full-header">
+                            <div class="job-full-title">{{ selectedJob.positionTitle }}</div>
+                            <a v-if="selectedJob.website" :href="selectedJob.website" target="_blank"
+                                class="job-full-company">{{ selectedJob.company }}</a>
+                            <div v-else class="job-full-company">{{ selectedJob.company }}</div>
+                        </div>
+                        <div class="job-full-meta">
+                            <div v-for="(meta, mIndex) in getJobMeta(selectedJob)" :key="mIndex"
+                                :class="['job-full-meta-item', { 'found-through-ai': meta.isAi }]">
+                                <span class="meta-label">{{ meta.label }}:</span> {{ meta.value }}
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <label class="keywords-label">Keywords:</label>
+                            <div class="keywords-container">
+                                <div v-for="(keyword, index) in selectedJob.keywords" :key="index" class="keyword-item">
+                                    {{ keyword }}
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="divider">
+                        <div class="job-full-description" v-html="selectedJob.description"></div>
+                        <div class="job-full-footer">
+                            <a v-if="selectedJob.applyLink" :href="selectedJob.applyLink"
+                                :target="selectedJob.applyLink.startsWith('javascript:') ? '_self' : '_blank'"
+                                class="primary-button apply-large">
+                                Apply for this position
+                            </a>
+                            <a v-if="selectedJob.company" :href="getLinkedInSearchUrl(selectedJob.company)"
+                                target="_blank" class="primary-button">
+                                Find Employees
+                            </a>
+                            <a v-if="selectedJobLink" class="primary-button" :href="selectedJobLink" target="_blank">
+                                View Job on Original Site
+                            </a>
+                            <RouterLink
+                                :to="`/resume?jobId=${selectedJob.id}&searchId=${searchId}`" class="primary-button"
+                            >
+                                Tailor My Resume
+                            </RouterLink>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Grid remains visible -->
+                <div v-if="displayedJobs.length > 0" class="job-grid-section">
+                    <div v-for="(jobs, dateIndex) in displayedJobs" :key="dateIndex" class="job-group">
+                        <h3 class="job-group-title">{{ formatDate(jobs[0]) }} <span style="font-size: small; margin-left: 10px">{{jobs[1].length}} {{ jobs[1].length === 1 ? 'Job' : 'Jobs'}}</span></h3>
+                        <div class="job-grid">
+                            <div v-for="(jobCard, jobCardIndex) in jobs[1]" :key="jobCard[0]?.applyLink || jobCardIndex"
+                                :class="['job-card', { 'job-ai-processed': jobCard[0]?.aiProcessed }]">
+
+                                <div v-for="(job, index) in jobCard" :key="job.applyLink || index" class="job-content"
+                                    @click="openJobCard(job, $event)" v-show="index === (jobCard.currentIndex || 0)">
+                                    <div v-if="job.image" class="job-image">
+                                        <img :src="job.image" :alt="job.company">
+                                    </div>
+                                    <div v-else-if="job.website" class="job-image" ref="faviconContainers">
+                                        <img :src="`https://www.google.com/s2/favicons?domain=${job.website}&sz=128`"
+                                            :alt="job.company"
+                                            @error="(($event.target as HTMLImageElement).closest('.job-image') as HTMLElement)!.style.display = 'none'">
+                                    </div>
+                                    <div>
+                                        <div v-if="job.isNew" class="new-job-badge">NEW</div>
+                                    </div>
+                                    <div class="job-header" :class="{ 'with-image': job.image || job.website }">
+                                        <div class="job-title-row">
+                                            <h3 class="job-title" :title="job.positionTitle">{{ job.positionTitle ||
+                                                `Untitled
+                                                Position` }}</h3>
+                                            <div class="badges-row">
+                                                <span v-if="jobCard.length > 1" class="version-badge">
+                                                    {{ Number(index) + 1 }} / {{ jobCard.length }}
+                                                </span>
+                                                <span v-if="scraperIdToIcon[job.scraperSource]">
+                                                    <img :src="scraperIdToIcon[job.scraperSource]"
+                                                        :alt="scraperIdToName[job.scraperSource]" width="20"
+                                                        height="20">
+                                                </span>
+                                                <span v-else-if="job.scraperSource" class="scraper-badge">{{
+                                                    scraperIdToName[job.scraperSource]
+                                                }}</span>
+                                            </div>
+                                        </div>
+                                        <a v-if="job.website" :href="job.website" :title="job.company" target="_blank"
+                                            class="job-full-company" @click.stop>{{
+                                                job.company }}</a>
+                                        <div v-else :title="job.company" class="job-full-company">{{ job.company }}
+                                        </div>
+                                    </div>
+
+                                    <div class="job-meta">
+                                        <div v-for="(meta, mIndex) in getJobMeta(job)" :key="mIndex"
+                                            :class="['meta-item', { 'found-through-ai': meta.isAi }]">
+                                            {{ meta.value }}
+                                        </div>
+                                    </div>
+
+                                    <div v-if="job.requirementsSummary" class="job-description">
+                                        {{ job.requirementsSummary }}
+                                    </div>
+                                    <div v-else-if="job.description" class="job-description"
+                                        v-html="removeImages(job.description)">
+                                    </div>
+
+                                    <div class="job-footer">
+                                        <button v-if="!job.saved" class="save-button" @click.stop="saveJob(job)">
+                                            Save
+                                        </button>
+                                        <button v-if="job.saved" class="unsave-button" @click.stop="unsaveJob(job)">
+                                            Unsave
+                                        </button>
+                                        <a v-if="job.applyLink" :href="job.applyLink"
+                                            :target="job.applyLink.startsWith('javascript:') ? '_self' : '_blank'"
+                                            class="apply-button" @click.stop>
+                                            Apply Now
+                                        </a>
+                                    </div>
+                                    <div v-if="jobCard.length > 1" class="navigation-controls">
+                                        <div v-if="(jobCard.currentIndex || 0) < jobCard.length - 1" class="arrow-right"
+                                            @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) + 1">
+                                            <ChevronRight :size="20" />
+                                        </div>
+                                        <div v-if="(jobCard.currentIndex || 0) > 0" class="arrow-left"
+                                            @click.stop="jobCard.currentIndex = (jobCard.currentIndex || 0) - 1">
+                                            <ChevronLeft :size="20" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <Transition name="scroll-fade">
+                        <div v-if="showScrollUpButton" class="scroll-up-button" @click="scrollToTop">
+                            <ChevronUp :size="20" />
+                        </div>
+                    </Transition>
+                </div>
+            </div>
+            <JobStats v-if="!viewSearch" :jobs="filteredJobs" />
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed, reactive, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { SavedSearch, ScraperConfig } from '../models'
+import type { ScraperParameter } from '../models'
+import AIFilters from '../components/AIFilters.vue'
+import JobStats from '../components/JobStats.vue'
+import AppLoader from '../components/AppLoader.vue'
+import { ChevronRight, ChevronLeft, ChevronUp } from 'lucide-vue-next'
+import Filter, { filters as defaultFilters } from '@/components/Filter'
+import { parseNumeric, calculateYearlySalary } from '@/components/salary'
+import { getStorageObject, updateStorageObject, getAllStorageObjects } from '../services/storageService'
+import { getExperienceNLP } from '../scripts/GetExperienceNLP'
+import { MY_SEARCHES, MY_SCRAPERS, JOBS, OPENAI_API_CONFIG } from '../services/storeNames'
+import { supabase } from '../../utils/supabase'
+import toHMS from "../scripts/convertTime"
+
+
+const repostCount = ref(0);
+const viewSearch = ref(true)
+
+const route = useRoute()
+const jobs = ref<any[]>([])
+const loading = ref(true)
+const aiFiltering = ref(false)
+const selectedJob = ref<any>(null)
+const selectedJobLink = ref<string>('')
+
+watch(selectedJob, async (newVal) => {
+    selectedJobLink.value = await getJobLink(newVal)
+})
+
+const sortOptions = ref([
+    'experience',
+    'salary',
+    'date',
+])
+
+const sortOrder = ref(['experience', 'salary'])
+const priorityOptions = ref([1, 2])
+const sortPriority = ref(1)
+const sortDirection = ref('asc')
+
+
+const locationFilter = ref('')
+const titleFilter = ref('')
+const minYOE = ref<number | null>(null);
+const maxYOE = ref<number | null>(null);
+
+const deselectedScrapers = ref<Set<string>>(new Set<string>());
+
+const amountFiltered = ref(0)
+const aiError = ref<string | null>(null)
+const savedOnly = ref(false)
+const noReposts = ref(true)
+const relevantOnly = ref(true);
+const latestSearchOnly = ref(true)
+
+const showAiModal = ref(false)
+const aiFilters = ref<Filter[]>(defaultFilters)
+const showScrollUpButton = ref(false)
+const scrollContainer = ref<HTMLElement | null>(null)
+const searchError = ref<string | null>(null)
+const scraperIdToName = reactive<Record<string, string>>({})
+const scraperIdToIcon = reactive<Record<string, string>>({});
+const scraperLinkTemplates = reactive<Record<string, string>>({});
+const currentSearch = ref<any>(null);
+const scraperJobCounts = ref<Record<string, number>>({});
+const newScraperJobCounts = ref<Record<string, number>>({});
+const scraperPromiseStatus = ref<Record<string, 'pending' | 'fulfilled' | 'rejected'>>({});
+const lastSearchTime = ref<Date | null>(null);
+
+let searchId: number;
+
+const stoppedScrapers = new Set();
+
+const stopScraper = (scraperId: string) => {
+    // necessary to add to stoppedScrapers if we want the scraper to have the red background to know that it was cancelled.
+    stoppedScrapers.add(scraperId);
+    window.postMessage({
+        type: "stop-scraper",
+        scraperId: scraperId
+    })
+}
+
+const scrollToTop = () => {
+    if (scrollContainer.value) {
+        scrollContainer.value.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        })
+    }
+}
+const newJobCount = computed(() => {
+    return filteredJobs.value.filter(job => job.isNew).length
+})
+const irrelevantCount = computed(() => {
+    return jobs.value.filter(job => !(job.isRelevantJob ?? true)).length
+})
+
+const saveJob = (job: any) => {
+    job.saved = true
+    saveJobs(searchId)
+}
+
+const unsaveJob = (job: any) => {
+    job.saved = false
+    saveJobs(searchId)
+}
+
+const runAI = async () => {
+    if (jobs.value.length === 0) return
+    aiFiltering.value = true
+    try {
+        await filterJobsWithAI(jobs.value, aiFilters.value)
+        // sortJobs() is called in displayedJobs
+        await saveJobs(searchId)
+    } finally {
+        aiFiltering.value = false
+    }
+}
+
+const runNLP = async () => {
+    jobs.value.forEach(job => {
+        runNLPOneJob(job)
+    })
+    saveJobs(searchId);
+}
+
+const runNLPOneJob = async (job: any) => {
+    const nlpResult = getExperienceNLP(job.description)
+    if (nlpResult.text) {
+        job.description = nlpResult.text
+    }
+    if (nlpResult["years of experience"] !== null) {
+        job.yearsOfExperience = nlpResult["years of experience"]
+        job.foundThroughAI ? job.foundThroughAI.push('yearsOfExperience') : job.foundThroughAI = ['yearsOfExperience']
+    }
+    //if (!job.salaryRange && nlpResult["salary range"] !== null) {
+
+    if (nlpResult["salary range"] !== null) {
+        job.salaryRange = nlpResult["salary range"]
+        job.foundThroughAI ? job.foundThroughAI.push('salaryRange') : job.foundThroughAI = ['salaryRange']
+    }
+    //if (!job.salaryType && nlpResult["salary type"] !== null) {
+    if (nlpResult["salary type"] !== null) {
+        job.salaryType = nlpResult["salary type"]
+        job.foundThroughAI ? job.foundThroughAI.push('salaryType') : job.foundThroughAI = ['salaryType']
+    }
+}
+
+
+// couldn't I just make this a normal variable in compute it in displayedJobs?
+const jobCardCount = computed(() => {
+    return displayedJobs.value.reduce((acc, jobGroup) => acc + jobGroup[1].length, 0)
+})
+
+
+
+const deselectedScrapersActual = ref<Set<string>>(new Set<string>());
+const locationFilterActual = ref('')
+const titleFilterActual = ref('')
+const minYOEActual = ref<number | null>(null)
+const maxYOEActual = ref<number | null>(null)
+const savedActual = ref<boolean>(false)
+const noRepostsActual = ref<boolean>(true)
+const relevantOnlyActual = ref<boolean>(true)
+const latestSearchOnlyActual = ref<boolean>(true)
+const applyFilters = () => {
+    locationFilterActual.value = locationFilter.value
+    titleFilterActual.value = titleFilter.value
+    minYOEActual.value = minYOE.value
+    maxYOEActual.value = maxYOE.value
+    savedActual.value = savedOnly.value;
+    noRepostsActual.value = noReposts.value;
+    relevantOnlyActual.value = relevantOnly.value;
+    latestSearchOnlyActual.value = latestSearchOnly.value;
+    deselectedScrapersActual.value = new Set(deselectedScrapers.value);
+}
+
+const filteredJobs = computed(() => {
+    let filteredJobs = jobs.value;
+    if (savedActual.value) {
+        filteredJobs = filteredJobs.filter(job => job.saved)
+    }
+    if (latestSearchOnlyActual.value) {
+        filteredJobs = filteredJobs.filter(job => job.fromLatestSearch)
+    }
+    if (noRepostsActual.value) {
+        filteredJobs = filteredJobs.filter(job => job.reposted == null)
+    }
+    if (relevantOnlyActual.value) {
+        filteredJobs = filteredJobs.filter(job => job.isRelevantJob ?? true)
+    }
+    if (locationFilterActual.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(locationFilterActual.value, 'i').test(job.location))
+    }
+    if (titleFilterActual.value) {
+        filteredJobs = filteredJobs.filter(job => RegExp(titleFilterActual.value, 'i').test(job.positionTitle))
+    }
+    const minYOEVal = minYOEActual.value;
+    if (typeof minYOEVal === 'number') {
+        filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience >= minYOEVal)
+    }
+    const maxYOEVal = maxYOEActual.value;
+    if (typeof maxYOEVal === 'number') {
+        filteredJobs = filteredJobs.filter(job => !job.yearsOfExperience || job.yearsOfExperience <= maxYOEVal)
+    }
+    if(deselectedScrapersActual.value.size > 0) {
+        filteredJobs = filteredJobs.filter(job => !deselectedScrapersActual.value.has(job.scraperSource))
+    }
+    return filteredJobs
+})
+
+
+const displayedJobs = computed(() => {
+    // you should only need to sort the jobs that are not getting filtered so isn't this inefficient?
+    sortJobs();
+    const jobsWithNoDuplicates = getDuplicates(filteredJobs.value)
+    const jobGroups = groupJobsByDate(jobsWithNoDuplicates)
+
+    const jobGroupArray = Object.entries(jobGroups).sort((a, b) => b[0].localeCompare(a[0]))
+
+    return jobGroupArray;
+})
+
+
+
+
+const groupJobsByDate = (filteredJobs: any[]) => {
+    // why don't I use Date type...
+
+    const jobGroups: Record<string, any[]> = {};
+    filteredJobs.forEach(job => {
+        const datePosted = job.reduce(
+            (min: string, j: any) => {
+                const dateToUse = j.datePosted ? j.datePosted : j.dateRange?.end
+                if(dateToUse == null)
+                    return min;
+                return dateToUse < min ? dateToUse : min
+            },
+            '9999-12-31'
+        );
+        if (jobGroups[datePosted]) {
+            jobGroups[datePosted]!.push(job);
+        } else {
+            jobGroups[datePosted] = [job];
+        }
+    });
+    return jobGroups;
+}
+
+
+const formatDate = (dateStr: string) => {
+    if (!dateStr || dateStr === '9999-12-31') return 'Unknown Date';
+    try {
+        const date = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00');
+        if (isNaN(date.getTime()))
+            return dateStr;
+
+
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch {
+        return dateStr;
+    }
+}
+
+const formatMoney = (val: number) => {
+    return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const removeImages = (html: string) => {
+    if (!html) return html;
+    return html.replace(/<img[^>]*>/gi, '');
+}
+
+// assume job type is yearly
+const cleanSalary = (job: any) => {
+    if (job.salaryRange === 'not specified') return 'not specified';
+    const parts = parseNumeric(job.salaryRange);
+    if (parts === null || parts[0] === undefined) return '';
+    const type = (job.salaryType || '').toLowerCase();
+    const useDecimals = type === 'hourly';
+
+    const format = (val: number) => {
+        return useDecimals ? formatMoney(val) : Math.round(val).toLocaleString();
+    }
+    return `$${format(parts[0])} ${parts[1] ? '- $' + format(parts[1]) : ''}`;
+}
+
+const getYearlyEstimate = (job: any) => {
+    const yearly = calculateYearlySalary(job);
+    if (yearly === null || yearly[0] === undefined) return '';
+    return `≈ $${Math.round(yearly[0]).toLocaleString()} ${yearly[1] ? '- $' + Math.round(yearly[1]).toLocaleString() : ''}`;
+}
+
+const sortJobs = () => {
+    const getVal = (job: any, criterion: string | undefined) => {
+        if (!criterion) return null;
+        if (criterion === 'experience') return parseNumeric(job.yearsOfExperience)
+        if (criterion === 'salary') return calculateYearlySalary(job)?.[0] // use the lower bound of the salary for sorting
+        if (criterion === 'date') return job.datePosted
+        return null
+    }
+
+    const compareBy = (a: any, b: any, criterion: string | undefined) => {
+        if (!criterion) return 0;
+        const valA = getVal(a, criterion)
+        const valB = getVal(b, criterion)
+
+        const isNilA = valA === undefined || valA === null;
+        const isNilB = valB === undefined || valB === null;
+
+        if (isNilA && isNilB) return 0;
+        if (isNilA) return sortDirection.value === 'asc' ? 1 : -1;
+        if (isNilB) return sortDirection.value === 'asc' ? -1 : 1;
+
+        if (valA === valB) return 0;
+        return sortDirection.value === 'asc' ? ((valA as number) - (valB as number)) : ((valB as number) - (valA as number));
+    }
+
+    jobs.value.sort((a: any, b: any) => {
+        const primary = Array.isArray(sortOrder.value) ? sortOrder.value[0] : sortOrder.value;
+        let result = compareBy(a, b, primary);
+
+        if (result === 0 && Array.isArray(sortOrder.value) && sortOrder.value[1]) {
+            result = compareBy(a, b, sortOrder.value[1]);
+        }
+
+        return result;
+    })
+}
+
+const openJobCard = (job: any, e: MouseEvent) => {
+    const selection = window.getSelection();
+
+    if (selection && selection.toString().length > 0) {
+        // user was selecting text → ignore click
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+    }
+
+    selectedJob.value = job
+}
+
+const getLinkedInSearchUrl = (company: string) => {
+    const query = `site:linkedin.com/in "${company}"`
+    return `https://www.google.com/search?q=${encodeURIComponent(query)}`
+}
+
+const closeJobCard = () => {
+    selectedJob.value = null
+}
+
+const getJobMeta = (job: any) => {
+    const meta = [];
+
+    if (job.location) {
+        meta.push({
+            label: 'Location',
+            value: job.location,
+            isAi: job.foundThroughAI?.includes('location')
+        });
+    }
+
+    if (job.salaryRange) {
+        meta.push({
+            label: 'Salary',
+            value: `${cleanSalary(job)} ${job.salaryType || ''}`.trim(),
+            isAi: job.foundThroughAI?.includes('salaryRange')
+        });
+    }
+
+    const yearly = getYearlyEstimate(job);
+    if (job.salaryType && job.salaryType !== 'yearly' && yearly) {
+        meta.push({
+            label: 'Estimate',
+            value: `${yearly} yearly`,
+            isAi: job.foundThroughAI?.includes('salaryRange')
+        });
+    }
+
+    if (job.datePosted) {
+        meta.push({
+            label: 'Posted',
+            value: Array.isArray(job.datePosted) ? job.datePosted[0] : job.datePosted,
+            isAi: job.foundThroughAI?.includes('datePosted')
+        });
+    }
+    else if(job.dateRange){
+        meta.push({
+            label :'Posted',
+            value: job.dateRange.start ? `${job.dateRange.start} to ${job.dateRange.end}` : `<= ${job.dateRange.end}`,
+            isAi: false,
+        })
+
+    }
+
+    if (job.yearsOfExperience === 'not specified' || job.yearsOfExperience === 0 || job.yearsOfExperience) {
+        const val = typeof job.yearsOfExperience === 'number' ? `${job.yearsOfExperience}y exp` : job.yearsOfExperience;
+        meta.push({
+            label: 'Experience',
+            value: val,
+            isAi: job.foundThroughAI?.includes('yearsOfExperience')
+        });
+    }
+
+    if (job.reposted) {
+        meta.push({
+            label: 'Reposts',
+            value: `${job.reposted}x reposted`,
+            isAi: false
+        });
+    }
+    if (job.requiresSchoolEnrollment != null) {
+        meta.push({
+            label: 'Requires School Enrollment',
+            value: job.requiresSchoolEnrollment,
+            isAi: job.foundThroughAI?.includes('requiresSchoolEnrollment')
+        });
+    }
+    if (job.prefersLocalCandidates != null) {
+        meta.push({
+            label: 'Prefers Local Candidates',
+            value: job.prefersLocalCandidates,
+            isAi: job.foundThroughAI?.includes('prefersLocalCandidates')
+        });
+    }
+
+    return meta;
+}
+
+const downloadJobs = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(jobs.value, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "jobs.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+}
+
+const elapsed = ref<number>(0);
+const completionTime = ref<Record<string, number>>({}); 
+const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
+    loading.value = true
+    const oldJobs = (await getStorageObject(JOBS, currentSearch.id)) || [];
+
+    const getMaps = (): { oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, seenJobs: Map<number, Set<string>> } => {
+        const oldJobsMap = new Map<string, any>();
+        const oldJobsDescriptionMap = new Map<string, any>();
+        const seenJobs = new Map<number, Set<string>>();
+        jobs.value.forEach((job: any) => {
+            let key = JSON.stringify(job);
+
+            if (job.id) {
+                key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
+                if (job.scraperSource && !seenJobs.has(job.scraperSource)) {
+                    seenJobs.set(job.scraperSource, new Set<string>());
+                }
+                seenJobs.get(job.scraperSource)?.add(job.id);
+            } else {
+                key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+            }
+            oldJobsMap.set(key, job);
+            oldJobsDescriptionMap.set(JSON.stringify({ title: job.title, company: job.company, description: job.description }), job);
+        });
+        return { oldJobsMap, oldJobsDescriptionMap, seenJobs }
+    }
+    const latestSearchDay: Record<string, string> = {};
+
+    const getLatestEndDate = (jobs: any[], scraperId: string): string | null=> {
+        if(latestSearchDay[scraperId])
+            return latestSearchDay[scraperId]
+        const res = jobs.filter(job => !job.fromLatestSearch && job.scraperSource === scraperId).reduce(
+            (prevJob: any, currJob: any) => {
+                const prevDate = prevJob.datePosted ? prevJob.datePosted : prevJob.dateRange?.end;
+                const currDate = currJob.datePosted ? currJob.datePosted : currJob.dateRange?.end;
+                return prevDate > currDate ? prevJob : currJob;
+                }, 
+            {datePosted: '1970-01-01'}
+        );
+        latestSearchDay[scraperId] = res.datePosted ? res.datePosted : res.dateRange?.end;
+        return latestSearchDay[scraperId] ?? null;
+    }
+
+    const addJob = async (job: any, scraperConfig: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>, currentSearch: any, scraperOrigin: 'public'|'private') => {
+        if (!Array.isArray(job))
+            job = [job];
+        for (let j of job) {
+
+            // it's necessary to add scraperOrigin here so that when running getJobCount, it knows if this id is from a public scraper or a private scraper.
+            // However, now the id is stored differently for the individual job as compared to the id from the scraper config.
+
+            j.scraperSource = scraperOrigin+'-'+scraperConfig.scraperId;
+
+            if(!j.datePosted){
+                const today = new Date().toISOString().split('T')[0];
+                let lastEndDate = getLatestEndDate(oldJobs, j.scraperSource)
+                if(today && j.scraperSource && lastEndDate && lastEndDate === today)
+                    j.datePosted = today;
+                // if the lastSearchDay is null, then the range should be {start: null, end: today.toISOString()} to demonstrate, that you don't how far back it could've been posted.
+                else 
+                    j.dateRange = {start: latestSearchDay[j.scraperSource], end: today};
+            }
+
+            j.website = addHttp(j.website);
+            const isNewJob = getExistingDataOneJob(j, oldJobsMap, oldJobsDescriptionMap);
+            if (isNewJob) {
+                // if nlp is enabled
+                runNLPOneJob(j);
+                j = await filterJobWithAI(j, currentSearch.filters);
+                jobs.value.push(j);
+                scraperJobCounts.value[j.scraperSource] = (scraperJobCounts.value[j.scraperSource] || 0) + 1;
+                newScraperJobCounts.value[j.scraperSource] = (newScraperJobCounts.value[j.scraperSource] || 0) + 1;
+            }
+        }
+    }
+
+    const startTimer = () => {
+        const start = performance.now();
+        const interval = setInterval(() => {
+            elapsed.value = (performance.now() - start) / 1000;
+        }, 1000);
+        return interval;
+    }
+
+    if (viewSearch || !currentSearch) {
+        jobs.value = oldJobs;
+        getJobCounts();
+        loading.value = false;
+        lastSearchTime.value = currentSearch.lastSearchTime ? new Date(currentSearch.lastSearchTime) : null;
+        completionTime.value = currentSearch.searchDurations || {};
+    }
+    else {
+        jobs.value = oldJobs.map((job: any) => { job.fromLatestSearch = false; job.isNew = false; return job; });
+        const { oldJobsMap, oldJobsDescriptionMap, seenJobs } = getMaps();
+        const promises: Promise<any>[] = [];
+        const interval = startTimer();
+        for (const [ index, scraperConfigs] of ([Object.values(currentSearch.publicScraperConfigs), Object.values(currentSearch.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
+            for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
+                
+                let scraperData = null;
+                // if you're getting public scrapers, then get it from Supabase
+                const origin = index === 0 ? 'public' : 'private';
+                if (origin === 'public') {
+                    const { data, error } = await supabase
+                        .from('Public Scrapers')
+                        .select('*')
+                        .eq('id', scraperConfig.scraperId);
+                    if(data && data.length > 0){
+                        scraperData = data[0];
+                        scraperData.parameters = JSON.parse(scraperData.parameters);
+                    }
+                    else 
+                        continue;
+                } else {
+                    scraperData = await getStorageObject(MY_SCRAPERS, scraperConfig.scraperId)
+                }
+                if (!scraperData) continue;
+                const scraperId: string = origin + '-' + scraperConfig.scraperId;
+                if(!scraperJobCounts.value[scraperId])
+                    scraperJobCounts.value[scraperId] = 0;
+                const code = scraperData.code;
+                const parameters = scraperData.parameters.map((name: string) => scraperConfig.parameters[name] || '');
+
+                if (code) {
+                    if (scraperData?.runInBackground) {
+                        try {
+                            scraperPromiseStatus.value[scraperId] = 'pending';
+                            const scraperPromise = new Promise<void>((resolve, reject) => {
+                                let handleMessage: (event: MessageEvent) => void;
+
+                                const timeout = setTimeout(() => {
+                                    window.removeEventListener('message', handleMessage);
+                                    reject(new Error("Timeout: Extension did not respond within 60 seconds. Make sure the extension is installed and active."));
+                                }, 60000);
+
+
+                                handleMessage = (event: MessageEvent) => {
+                                    // We only accept messages from ourselves
+                                    if (event.source !== window) return;
+
+                                    if (event.data && event.data.type === 'scraper-result-event') {
+                                        if (event.data.scraperId !== scraperId) return;
+                                        console.log("[SCRAPER-DEBUG] Received scraper-result-event", event.data);
+                                        if (event.data.result) {
+                                            // Keep the timeout alive or clear it if we trust subsequent results
+                                            // For now, let's just clear it on the first result to show it's working
+                                            clearTimeout(timeout);
+                                            addJob(event.data.result, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
+                                        }
+                                        else {
+                                            window.removeEventListener('message', handleMessage);
+                                            clearTimeout(timeout);
+                                            if (event.data.done) {
+                                                resolve();
+                                            } else {
+                                                reject(new Error(event.data.error || "Unknown background error"));
+                                            }
+                                        }
+                                    }
+                                };
+
+                                window.addEventListener('message', handleMessage);
+
+                                window.postMessage({
+                                    type: 'run-scraper-event',
+                                    payload: {
+                                        scraperName: scraperData.name,
+                                        code: code,
+                                        parameters: parameters,
+                                        // should this get a scraperId which is preceded by public or private?
+                                        seenIds: seenJobs.get(scraperConfig.scraperId) || new Set<string>(),
+                                        scraperId: scraperId
+                                    }
+                                }, '*');
+                            }).then(() => {
+                                scraperPromiseStatus.value[scraperId] = 'fulfilled';
+                            }).catch((e) => {
+                                scraperPromiseStatus.value[scraperId] = 'rejected';
+                                throw e;
+                            }).finally(() => {
+                                completionTime.value[scraperId] = elapsed.value;
+                            });
+
+                            promises.push(scraperPromise);
+
+                        } catch (e: any) {
+                            searchError.value = `Execution Error: ${e.message}`;
+                        }
+                    }
+                    else {
+                        try {
+                            const scraperFunction = new Function(`
+                                ${code}
+                                return typeof scrape !== 'undefined' ? scrape : null;
+                            `)();
+
+                            if (typeof scraperFunction === 'function') {
+                                scraperPromiseStatus.value[scraperId] = 'pending';
+                                const scraperPromise = (async function () {
+                                    for await (let job of scraperFunction(...parameters)) {
+                                        if(stoppedScrapers.has(scraperId))
+                                            break;
+                                        addJob(job, scraperConfig, oldJobsMap, oldJobsDescriptionMap, currentSearch, origin);
+                                    }
+                                })().then(() => {
+                                    scraperPromiseStatus.value[scraperId] = 'fulfilled';
+                                }).catch((e) => {
+                                    scraperPromiseStatus.value[scraperId] = 'rejected';
+                                    throw e;
+                                }).finally(() => {
+                                    completionTime.value[scraperId] = elapsed.value;
+                                });
+                                promises.push(scraperPromise);
+
+                            }
+                        } catch (e: any) {
+                            console.error(`Error running scraper ${scraperData.name}:`, e);
+                            if (e instanceof TypeError && e.message.includes('NetworkError')) {
+                                searchError.value = `CORS Error: The scraper for ${scraperData.name} was blocked by the website. Browser scrapers often require a CORS proxy.`;
+                            } else {
+                                searchError.value = `Error running scraper ${scraperData.name}: ${e.message || e}`;
+                            }
+                        }
+                    }
+                }
+            }
+
+        await Promise.all(promises);
+        clearInterval(interval);
+        saveJobs(currentSearch.id);
+        loading.value = false;
+    }
+}
+
+async function saveJobs(searchId: number) {
+    try {
+        // why am I not running createStorageObject instead in case this is the first time you run it? Because you don't need the backend to supply an id for the search. 
+        // you can just use the existing id of the search.
+        await updateStorageObject(JOBS, searchId, jobs.value);
+        await updateStorageObject(MY_SEARCHES, searchId, { ...currentSearch.value, lastSearchTime: lastSearchTime.value, searchDurations: { ...completionTime.value } });
+        console.log("Saved", jobs.value.length, "jobs to storage");
+    } catch (e: any) {
+        console.error("Failed to save jobs to storage:", e);
+        searchError.value = "Failed to save jobs: " + (e.message || 'Storage limit exceeded or invalid data.');
+    }
+}
+
+// returns true if the job is new, false otherwise
+const getExistingDataOneJob = (job: any, oldJobsMap: Map<string, any>, oldJobsDescriptionMap: Map<string, any>) => {
+    let key = null;
+    let hasId = false;
+    if (job.id && job.scraperSource) {
+        key = JSON.stringify({ id: job.id, scraperSource: job.scraperSource });
+        hasId = true;
+    } else {
+        key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+    }
+
+    const oldJob = oldJobsMap.get(key);
+    if (oldJob) {
+        // this is supposed to check whether the job is a repost.
+        if (!hasId && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))) {
+            oldJob.reposted = (oldJob.reposted || 0) + 1;
+            repostCount.value++;
+            oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
+            oldJob.fromLatestSearch = true;
+        } else {
+            oldJob.fromLatestSearch = true;
+            if (oldJob.reposted > 0)
+                repostCount.value++;
+        }
+        return false;
+
+    } else {
+        if (hasId) {
+            key = JSON.stringify({ title: job.title, company: job.company, description: job.description });
+            const oldJob = oldJobsDescriptionMap.get(key);
+
+            if (oldJob && ((oldJob.id && oldJob.scraperSource === job.scraperSource && job.id !== oldJob.id) || (!oldJob.id && ((Array.isArray(oldJob.datePosted) && !oldJob.datePosted.includes(job.datePosted)) || (!Array.isArray(oldJob.datePosted) && oldJob.datePosted !== job.datePosted))))) {
+                oldJob.reposted = (oldJob.reposted || 0) + 1;
+                repostCount.value++;
+                oldJob.datePosted = Array.isArray(oldJob.datePosted) ? [...oldJob.datePosted, job.datePosted] : [oldJob.datePosted, job.datePosted];
+                oldJob.fromLatestSearch = true;
+                return false;
+            }
+        }
+        // why don't we check for the case that the job doesn't have an id and it's a repost?
+        // Because if it didn't have an id and there were a job with the same description (the criterion used to gauge if the job is a repost) then it must be the case that oldJob is true. 
+        job.fromLatestSearch = true;
+        job.isNew = true;
+        return true;
+    }
+}
+
+const getDuplicates = (jobList: any[]) => {
+    const seenTitleAndCompany = new Set();
+    const seenTitleAndWebsite = new Set();
+    const seenApplyLinks = new Set();
+    const groupedResults: any[] = [];
+
+    for (const job of jobList) {
+
+        if (!job || !job.positionTitle || !job.company) {
+            const group: any = reactive([job]);
+            group.currentIndex = 0;
+            groupedResults.push(group);
+            continue;
+        }
+
+        let key = job.positionTitle.trim() + job.company.trim();
+        if (seenTitleAndCompany.has(key)) {
+            const group = groupedResults.find(g => g[0]?.positionTitle?.trim() + g[0]?.company?.trim() === key);
+            if (group) {
+                group.push(job);
+            }
+            // is it possible for this here to happen?
+            else {
+                const group: any = reactive([job]);
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        }
+        else if (job.website && seenTitleAndWebsite.has(key = job.positionTitle.trim() + getDomain(job.website))) {
+            const group = groupedResults.find(g => g[0]?.positionTitle?.trim() + getDomain(g[0]?.website?.trim()) === key);
+            if (group) {
+                group.push(job);
+            }
+            // is it possible for this here to happen?
+            else {
+                const group: any = reactive([job]);
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        }
+        else if (seenApplyLinks.has(key = job.applyLink)) {
+            const group = groupedResults.find(g => g[0]?.applyLink === key);
+            if (group) {
+                group.push(job);
+            }
+            // is it possible for this here to happen?
+            else {
+                const group: any = reactive([job]);
+                group.currentIndex = 0;
+                groupedResults.push(group);
+            }
+        } else {
+            seenApplyLinks.add(job.applyLink);
+
+            if (job.website)
+                seenTitleAndWebsite.add(job.positionTitle.trim() + getDomain(job.website));
+            seenTitleAndCompany.add(job.positionTitle.trim() + job.company.trim());
+            const group: any = reactive([job]);
+            group.currentIndex = 0;
+            groupedResults.push(group);
+        }
+    }
+    return groupedResults;
+}
+
+const getDomain = (url: string) => url ? url.trim().replace(/^(https?:\/\/)?(www\.)?/, '') : url;
+
+const filterJobsWithAI = async (jobList: any[], filters: any) => {
+    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
+    const openaiApiKey = openaiConfig['openai_api_key'] || ''
+    const endPoint = openaiConfig['end_point'] || ''
+    const model = openaiConfig['model'] || ''
+    amountFiltered.value = 0;
+    if (!openaiApiKey || !endPoint) {
+        console.warn("API key or Endpoint missing for AI filtering");
+        return;
+    }
+
+    // Group jobs by description to avoid redundant AI calls for duplicate postings
+    const grouped = getDuplicates(jobList);
+
+    const aiPromises = grouped.map(async group => {
+        const firstJob = group[0];
+        if (!firstJob) return group;
+        if (firstJob.aiProcessed) return group;
+        if (firstJob.fromLatestSearch === false) return group;
+        try {
+            let localizedPrompt = 'From the job title and description, determine the following and answer in JSON format:';
+            let number = 1;
+            const exampleJson: any = {}
+            filters.forEach((filter: Filter) => {
+                if (filter.value && filter.outputs.some((output: string) => !firstJob[output])) {
+                    localizedPrompt += number++ + `. ${filter.prompt}`;
+                    Object.keys(filter.exampleJson).forEach(key => {
+                        exampleJson[key] = filter.exampleJson[key];
+                    })
+                }
+            })
+            localizedPrompt += '\n\nExample JSON output:\n\n' + JSON.stringify(exampleJson) + "\n\n" + firstJob.description;
+
+            if (number !== 1) {
+                const response = await fetch(endPoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${openaiApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            {
+                                role: 'user',
+                                content: localizedPrompt
+                            }
+                        ]
+                    })
+                });
+
+                if (response.status === 200) {
+                    const data = await response.json();
+                    const content = data.choices[0].message.content.trim();
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    const parsedContent = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+
+                    let keys: string[] = []
+                    filters.forEach((filter: Filter) => {
+                        if (filter.value && filter.outputs.some((output: string) => !firstJob[output])) {
+                            keys.push(...filter.outputs);
+                        }
+                    })
+
+                    group.forEach((job: any) => {
+                        job.aiProcessed = true;
+                        keys.forEach(key => {
+                            if (parsedContent && key in parsedContent) {
+                                job[key] = parsedContent[key];
+                                job["foundThroughAI"] = job["foundThroughAI"] || []
+                                if (!job["foundThroughAI"].includes(key)) {
+                                    job["foundThroughAI"].push(key)
+                                }
+                            }
+                        });
+                    });
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.error?.message || response.statusText;
+                    aiError.value = `AI Error (${response.status}): ${errorMessage}`;
+                    console.error(`AI Error (${response.status}):`, errorMessage);
+                }
+            }
+            else {
+                group.forEach((job: any) => job.aiProcessed = true);
+            }
+
+            return group;
+        } catch (e: any) {
+            aiError.value = `AI connection failed: ${e.message || 'Unknown error'}`;
+            console.error("AI Error:", e);
+            return group;
+        } finally {
+            amountFiltered.value++;
+        }
+    });
+
+    await Promise.all(aiPromises);
+}
+
+const filterJobWithAI = async (job: any, filters: Filter[]) => {
+    const openaiConfig = await getAllStorageObjects(OPENAI_API_CONFIG);
+    const openaiApiKey = openaiConfig['openai_api_key'] || ''
+    const endPoint = openaiConfig['end_point'] || ''
+    const model = openaiConfig['model'] || ''
+    try {
+        let localizedPrompt = 'From the job title and description, determine the following and answer in JSON format:';
+        let number = 1;
+        const exampleJson: any = {}
+        filters.forEach((filter: Filter) => {
+            if (filter.value && filter.outputs.some((output: string) => !job[output])) {
+                localizedPrompt += number++ + `. ${filter.prompt}`;
+                Object.keys(filter.exampleJson).forEach(key => {
+                    exampleJson[key] = filter.exampleJson[key];
+                })
+            }
+        })
+        localizedPrompt += '\n\nExample JSON output:\n\n' + JSON.stringify(exampleJson) + "\n\n" + job.description;
+
+        if (number !== 1) {
+            const response = await fetch(endPoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${openaiApiKey}`
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: localizedPrompt
+                        }
+                    ]
+                })
+            });
+
+            if (response.status === 200) {
+                const data = await response.json();
+                const content = data.choices[0].message.content.trim();
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+                let keys: string[] = []
+                filters.forEach((filter: Filter) => {
+                    if (filter.value && filter.outputs.some((output: string) => !job[output])) {
+                        keys.push(...filter.outputs);
+                    }
+                })
+
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData.error?.message || response.statusText;
+                aiError.value = `AI Error (${response.status}): ${errorMessage}`;
+                console.error(`AI Error (${response.status}):`, errorMessage);
+            }
+        }
+
+        return job;
+    } catch (e: any) {
+        aiError.value = `AI connection failed: ${e.message || 'Unknown error'}`;
+        console.error("AI Error:", e);
+        return job;
+    } finally {
+        amountFiltered.value++;
+    }
+}
+
+// gets the job link from the scraper website. This is different from the apply link in that if you found a job through indeed, this link will be the Indeed link and not the apply link which could be on Workday for example.
+const getJobLink = async (job: any) => {
+    if (!job || !job.scraperSource || !job.id) return ''
+    let url = scraperLinkTemplates[job.scraperSource]?.replace('{id}', job.id) || ''
+    url = addHttp(url)
+    return url;
+}
+
+const addHttp = (url: string) => {
+    if (!url) return url;
+    if (!url.startsWith('http') && !url.startsWith('//')) {
+        url = 'https://' + url
+    }
+    return url
+}
+
+const loadScraperMetadata = async (scraperId: string|number, givenScraperOrigin: "public"|"private"|null = null) => {
+    // scraperOrigin: 0 public, 1 private
+    let scraperIdForDatabase = scraperId
+
+    let scraperIdLocal = scraperId;
+    let scraperOrigin = givenScraperOrigin
+
+    if(typeof scraperId === 'string'){
+        scraperOrigin = scraperId.startsWith('public') ? 'public' : 'private';
+        scraperIdForDatabase = Number(scraperId.replace(/((public)|(private))-/, ''));
+    }
+    else{
+        if(!givenScraperOrigin)
+            throw new Error("Scraper origin not provided.");
+        scraperIdLocal = givenScraperOrigin + '-' + scraperId;
+    }
+    let scraperData = null;
+    if(scraperOrigin === 'public'){
+        const response = await supabase.from('Public Scrapers').select('*').eq('id', scraperIdForDatabase).single();
+        scraperData = response.data;
+    }
+
+    else
+        scraperData = await getStorageObject(MY_SCRAPERS, scraperIdForDatabase);
+    if (scraperData) {
+        scraperIdToName[scraperIdLocal] = scraperData.name;
+        scraperLinkTemplates[scraperIdLocal] = scraperData.jobLinkTemplate;
+        if (scraperData.icon) {
+            scraperIdToIcon[scraperIdLocal] = scraperData.icon;
+        }
+    }
+}
+
+const getJobCounts = () => {
+    Object.keys(scraperJobCounts.value).forEach(key => {
+        scraperJobCounts.value[key] = 0;
+    })
+    Object.keys(newScraperJobCounts.value).forEach(key => {
+        newScraperJobCounts.value[key] = 0;
+    })
+    filteredJobs.value.forEach((job: any) => {
+        const id = job.scraperSource;
+        if (id) {
+            scraperJobCounts.value[id] = (scraperJobCounts.value[id] || 0) + 1;
+            if (job.isNew)
+                newScraperJobCounts.value[id] = (newScraperJobCounts.value[id] || 0) + 1;
+        }
+    })
+    for (const scraperId of (Object.keys(scraperJobCounts.value))) {
+        if (!scraperIdToName[scraperId] || !scraperLinkTemplates[scraperId] || !scraperIdToIcon[scraperId]) {
+            loadScraperMetadata(scraperId);
+        }
+    }
+}
+
+watch(filteredJobs, () => {
+    getJobCounts();
+}, { immediate: true });
+
+
+onMounted(async () => {
+    if (scrollContainer.value) {
+        scrollContainer.value.addEventListener('scroll', () => {
+            showScrollUpButton.value = (scrollContainer.value?.scrollTop || 0) > 100
+        })
+    }
+
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        searchId = Number(urlParams.get('search-id'));
+        const viewSearch = urlParams.get('last-search') === 'true';
+
+
+        if (searchId) {
+            currentSearch.value = await getStorageObject(MY_SEARCHES, searchId)
+            document.title = `Search ${currentSearch.value.name}`
+
+            // Pre-load all enabled scraper metadata
+            for (const [ index, scraperConfigs] of ([Object.values(currentSearch.value.publicScraperConfigs), Object.values(currentSearch.value.privateScraperConfigs)] as ScraperConfig[][]).entries()) 
+                for (const scraperConfig of scraperConfigs.filter((config: ScraperConfig) => config.enabled)) {
+                    await loadScraperMetadata(scraperConfig.scraperId, index === 0 ? 'public' : 'private');
+                }
+
+            await executeSearch(currentSearch.value, viewSearch)
+        } else {
+            loading.value = false
+        }
+    } catch (e) {
+        console.error('Failed to parse search results:', e)
+        loading.value = false
+    }
+})
+
+</script>
+
+<style scoped>
+.scroll-up-button {
+    position: fixed;
+    bottom: 50px;
+    right: 50px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    z-index: 1000;
+    background-color: #3b82f6;
+    color: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 10px;
+    width: 50px;
+    height: 50px;
+}
+
+.scroll-up-button:hover {
+    transform: scale(1.1);
+}
+
+/* Button Animation */
+.scroll-fade-enter-active,
+.scroll-fade-leave-active {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scroll-fade-enter-from,
+.scroll-fade-leave-to {
+    opacity: 0;
+    transform: scale(0.5) translateY(20px);
+}
+
+.arrow-right {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.job-card:hover .arrow-right {
+    transform: translateY(-50%) translateX(4px);
+}
+
+.arrow-left {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+    z-index: 2;
+}
+
+.job-card:hover .arrow-left {
+    transform: translateY(-50%) translateX(-4px);
+}
+
+.tabs {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 30px;
+    margin-top: 10px;
+}
+
+.ai-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fef2f2;
+    border: 1px solid #fee2e2;
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    color: #991b1b;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.error-icon {
+    font-size: 18px;
+}
+
+.error-message {
+    flex: 1;
+}
+
+.close-error {
+    background: none;
+    border: none;
+    color: #991b1b;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.close-error:hover {
+    opacity: 1;
+}
+
+.badges-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.job-icon{
+    position: absolute;
+    top: 24px;
+    right: 24px;
+}
+.version-badge {
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+}
+
+.arrow-right,
+.arrow-left {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    width: 32px;
+    height: 32px;
+    z-index: 10;
+}
+
+.arrow-right:hover,
+.arrow-left:hover {
+    background: white;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.tabs div {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.not-selected {
+    font-size: 24px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.not-selected:hover {
+    color: #64748b;
+}
+
+/* Job Sidebar Overlay */
+.job-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+}
+
+.job-full {
+    position: fixed;
+    top: 0;
+    right: -70%;
+    /* Start hidden off-screen */
+    width: 70%;
+    height: 100vh;
+    background: white;
+    z-index: 1001;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+    transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.job-full.active {
+    right: 0;
+}
+
+.job-full-content {
+    padding: 60px 40px;
+    height: 100%;
+    overflow-y: auto;
+    position: relative;
+}
+
+.close-sidebar {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: #f1f5f9;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    color: #475569;
+}
+
+.close-sidebar:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+.job-full-header {
+    margin-bottom: 30px;
+}
+
+.job-full-title {
+    font-size: 32px;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+    margin-bottom: 12px;
+}
+
+.job-full-company {
+    font-size: 20px;
+    color: #3b82f6;
+    font-weight: 600;
+    text-decoration: none;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    pointer-events: auto;
+    white-space: pre-line;
+}
+
+.job-full-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 30px;
+}
+
+.job-full-meta-item {
+    font-size: 15px;
+    color: #475569;
+    background: #f8fafc;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid #f1f5f9;
+    position: relative;
+}
+
+.meta-label {
+    font-weight: 700;
+    color: #64748b;
+    margin-right: 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.keywords-label {
+    font-weight: 700;
+    color: #64748b;
+    margin-right: 4px;
+    font-size: 13px;
+    text-transform: uppercase;
+}
+
+.keywords-container {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.keyword-item {
+    padding: 8px 16px;
+    background: #f8fafc;
+    border-radius: 4px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+.divider {
+    border: 0;
+    border-top: 1px solid #e2e8f0;
+    margin: 30px 0;
+}
+
+.job-full-description {
+    font-size: 16px;
+    line-height: 1.8;
+    color: #334155;
+    word-break: break-word;
+}
+
+.job-full-description :deep(*) {
+    position: static !important;
+    height: auto !important;
+    width: auto !important;
+    max-width: 100% !important;
+}
+
+
+.job-full-footer {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    margin-top: 50px;
+    padding-top: 30px;
+    border-top: 1px solid #e2e8f0;
+}
+
+.apply-large {
+    padding: 18px !important;
+    font-size: 18px !important;
+    text-align: center;
+    background: #3b82f6;
+}
+
+.view-content-centered {
+    width: 100%;
+    overflow-y: auto;
+}
+
+.view-search-container {
+    flex: 1;
+    width: 90%;
+    padding: 20px 0px;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.view-header {
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.back-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+    font-size: 14px;
+}
+
+.back-button:hover {
+    color: #3b82f6;
+}
+
+.selected {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+    color: #1e293b;
+    position: relative;
+}
+
+.selected::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 40px;
+    height: 4px;
+    background: #3b82f6;
+    border-radius: 2px;
+}
+
+.results-count {
+    font-size: 16px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.job-grid-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.job-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.job-group-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary, #333);
+    margin: 0;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.job-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 24px;
+}
+
+.job-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.job-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.05);
+    border-color: #3b82f6;
+}
+
+.job-ai-processed {
+    background-color: #f0f9ff;
+    /* A very light, clean sky blue */
+    border-color: #bae6fd;
+    /* A slightly darker blue border to define the edge */
+}
+
+.new-job-badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    background: linear-gradient(135deg, #fcd34d 0%, #fbbf24 50%, #f59e0b 100%);
+    /* Amber/Gold gradient */
+    color: #78350f;
+    font-size: 12px;
+    font-weight: 900;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    z-index: 3;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15), inset 0 2px 4px rgba(255, 255, 255, 0.5);
+}
+
+.job-image {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    width: 60px;
+    height: 60px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 2;
+}
+
+.job-image img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.job-content {
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1;
+}
+
+
+.job-header {
+    margin-bottom: 16px;
+}
+
+.job-header.with-image {
+    padding-left: 75px;
+    /* Space for the logo */
+}
+
+.job-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.job-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.4;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    pointer-events: auto;
+    white-space: pre-line;
+}
+
+.scraper-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: #f1f5f9;
+    color: #64748b;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.job-company {
+    font-size: 16px;
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+.job-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+}
+
+.meta-item {
+    font-size: 10px;
+    color: #64748b;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+}
+
+.found-through-ai {
+    background: #fef2f2 !important;
+    border: 1px solid #fee2e2 !important;
+}
+
+.found-through-ai::after {
+    content: '';
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    border: 1.5px solid white;
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
+}
+
+.job-description {
+    font-size: 14px;
+    color: #475569;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    /* Line Clamping */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    pointer-events: none;
+    white-space: pre-line;
+}
+
+.job-description :deep(*) {
+    display: inline !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    width: auto !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    font-weight: inherit !important;
+}
+
+.job-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: auto;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.save-button {
+    background-color: #3b82f6;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+}
+
+.save-button:hover {
+    background: #2563eb;
+}
+
+.unsave-button {
+    background-color: #ef4444;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+    cursor: pointer;
+    border: none;
+}
+
+.unsave-button:hover {
+    background: #dc2626;
+}
+
+.apply-button {
+    background: #3b82f6;
+    color: white;
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.apply-button:hover {
+    background: #2563eb;
+}
+
+.loading-state,
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.empty-icon {
+    font-size: 64px;
+    margin-bottom: 24px;
+}
+
+
+.primary-button {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 20px;
+}
+
+.control-panel {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.panel-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.results-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.results-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.5px;
+}
+
+.results-badge {
+    font-size: 20px;
+    font-weight: 800;
+    color: #1e293b;
+}
+
+.new-jobs-badge {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.control-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.select-wrapper {
+    display: flex;
+    gap: 2px;
+    background: #f1f5f9;
+    padding: 2px;
+    border-radius: 10px;
+}
+
+.styled-select {
+    border: none;
+    background: transparent;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.styled-select:focus {
+    outline: none;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.styled-select.direction {
+    width: 85px;
+}
+
+.styled-select.priority {
+    width: 60px;
+}
+
+.styled-select.target {
+    width: 110px;
+}
+
+.ai-trigger-button {
+    background: #f5f3ff;
+    border: 1px solid #ddd6fe;
+    color: #7c3aed;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    align-self: flex-end;
+}
+
+.ai-trigger-button:hover {
+    background: #ede9fe;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(124, 58, 237, 0.1);
+}
+
+.modal-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1e293b;
+    margin: 8px 0;
+}
+
+
+.ai-modal {
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 20px;
+    background-color: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e2e8f0;
+    width: 50%;
+    height: 50%;
+    margin: auto;
+}
+
+.ai-modal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px 0;
+}
+
+.ai-run-button.large {
+    padding: 16px;
+    font-size: 16px;
+    margin-top: 0;
+}
+
+/* Toggle Switch */
+.toggle-switch {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background-color: #cbd5e1;
+    transition: .4s;
+    border-radius: 34px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: #3b82f6;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #475569;
+}
+
+.panel-ai {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 24px;
+}
+
+.ai-run-button {
+    margin-top: 12px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.inline-loader {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.ai-progress-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    padding: 12px 20px;
+    border-radius: 12px;
+    margin-top: 10px;
+    color: #0369a1;
+    font-size: 14px;
+    font-weight: 500;
+    animation: fadeIn 0.3s ease-out;
+}
+
+
+.mini-loader {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #bae6fd;
+    border-top: 2px solid #0369a1;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.stats-view {
+    padding: 20px 0;
+    animation: fadeIn 0.4s ease-out;
+}
+
+.stats-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.stats-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 30px;
+}
+
+.chart-container {
+    background: #ffffff;
+    border-radius: 12px;
+}
+
+.scraper-count, .scraper-count-cancelled, .scraper-count-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 5px;
+    border-radius: 10px;
+}
+.scraper-count{
+    background-color: white;
+}
+.scraper-count-cancelled{
+    background-color: rgb(255, 118, 118);
+}
+.scraper-count-loading{
+    background-color: #f0f9ff;
+}
+
+.scraper-count-list {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    overflow-x: auto;
+}
+</style>

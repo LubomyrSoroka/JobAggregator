@@ -207,7 +207,7 @@ const displayPDF = async (firstTime: boolean) => {
 }
 
 const saveYaml = async () =>{
-    displayPDF(false)
+    await displayPDF(false)
     if(jobId.value){
         await updateStorageObject(RESUMES, jobId.value, {'yaml-resume':yamlText.value});
     }

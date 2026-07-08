@@ -175,6 +175,8 @@ const splitCVIntoPages = () => {
     const margins = source.querySelector('.margins');
     if (!margins) return;
 
+    container.style.transform = '';
+
     const top = margins.querySelector('.top') as HTMLElement;
     const sections = Array.from(margins.querySelectorAll('.section')) as HTMLElement[];
 
@@ -236,7 +238,7 @@ const splitCVIntoPages = () => {
 
             // Maximum allowed height for content inside margins is 11in - 0.7in bottom margin
             const maxPageHeight = 10.3 * 96;
-            const currentHeight = currentPage.getBoundingClientRect().height;
+            const currentHeight = currentPage.offsetHeight;
 
             if (currentHeight > maxPageHeight) {
                 // Determine if we can move this element to a new page
@@ -298,4 +300,3 @@ const scalePreview = () => {
         }
     }
 </style>
-
