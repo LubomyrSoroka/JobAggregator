@@ -82,6 +82,7 @@ const handleMessage = (event: MessageEvent) => {
 
 onMounted(async () => {
     window.addEventListener('message', handleMessage);
+    window.addEventListener('keydown', handleKeyDown);
 
     const urlParams = new URLSearchParams(window.location.search);
     jobId.value = urlParams.get('jobId');
@@ -112,8 +113,16 @@ onMounted(async () => {
 
 })
 
+const handleKeyDown = (event: KeyboardEvent) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        saveYaml();
+    }
+};
+
 onUnmounted(() => {
     window.removeEventListener('message', handleMessage);
+    window.removeEventListener('keydown', handleKeyDown);
 });
 
 // 1. Read and parse the YAML
@@ -253,7 +262,10 @@ const getTransformedData = (): TransformedCVData | null => {
 };
 
 const downloadPDF = () => {
+    const oldTitle = document.title;
+    document.title = filename.value;
     window.print();
+    document.title = oldTitle;
 }
 const savePDF = () => {
     window.postMessage({type: 'get-pdf-data', filename: filename.value});

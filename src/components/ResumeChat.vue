@@ -11,6 +11,12 @@
         <div class="input-section">
             <input type="text" v-model="message" placeholder="Enter your message..." @keyup.enter="() => sendMessage()"/>
             <button @click="() => sendMessage()">Send</button>
+            <div class="info-tooltip">
+                <span class="info-icon">?</span>
+                <span class="tooltip-text">
+                    Use <strong>{resume}</strong> for the text content of your resume, and <strong>{jobDescription}</strong> for the text content of the job description.
+                </span>
+            </div>
         </div>
     </div>
 </template>
@@ -188,8 +194,69 @@
     }
     .input-section{
         display: flex;
+        align-items: center;
+        gap: 10px;
     }
     .input-section input{
         flex: 1;
+    }
+    .info-tooltip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .info-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #666;
+        font-weight: bold;
+        background: #f9f9f9;
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+    .info-tooltip:hover .info-icon {
+        background-color: #e6e6e6;
+        border-color: #999;
+    }
+    .tooltip-text {
+        visibility: hidden;
+        width: 240px;
+        background-color: #333;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 8px 12px;
+        position: absolute;
+        z-index: 10;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out, visibility 0.2s;
+        font-size: 12px;
+        line-height: 1.4;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        pointer-events: none;
+    }
+    .tooltip-text::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+    }
+    .info-tooltip:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
     }
 </style>

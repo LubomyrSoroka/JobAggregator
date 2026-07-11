@@ -133,7 +133,6 @@
 
                     <div class="ai-modal-content">
                         <AIFilters :filters="aiFilters" id-prefix="view-modal" />
-
                         <button class="primary-button ai-run-button large"
                             @click="() => { runAI(); showAiModal = false; }"
                             :disabled="aiFiltering || aiFilters.every((filter: Filter) => !filter.value)">
