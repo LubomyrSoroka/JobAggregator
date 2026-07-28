@@ -200,12 +200,14 @@ export async function getStorageObject(storeName: string, key: string | number):
  * Stringifies data to strip Vue Proxies (deeply) for IndexedDB compatibility.
  */
 // if you want to use a custom key, you could just call updateStorageObject directly... but I'll leave this since some code relies on this function.
-export async function createStorageObject(storeName: string, value: any, key?: string | number): Promise<number> {
-    return await storage.create(storeName, toPlainObject(value));
+export async function createStorageObject(storeName: string, value: any, serialize: boolean = false): Promise<number> {
+    return await storage.create(storeName, serialize ? toPlainObject(value) : value);
 }
 
-export async function updateStorageObject(storeName: string, key: string | number, value: any): Promise<void> {
-    await storage.update(storeName, key, toPlainObject(value));
+// should only set serialize to false in the rare case that what you want to save to storage should go to storage even if I decide to switch to some cloud backend.
+// e.g. filehandles
+export async function updateStorageObject(storeName: string, key: string | number, value: any, serialize: boolean = true): Promise<void> {
+    await storage.update(storeName, key, serialize ? toPlainObject(value) : value);
 }
 
 /**

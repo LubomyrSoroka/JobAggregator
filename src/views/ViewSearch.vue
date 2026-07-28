@@ -385,6 +385,7 @@ import { getExperienceNLP } from '../scripts/GetExperienceNLP'
 import { MY_SEARCHES, MY_SCRAPERS, JOBS, OPENAI_API_CONFIG } from '../services/storeNames'
 import { supabase } from '../../utils/supabase'
 import toHMS from "../scripts/convertTime"
+import { browser } from '@/scripts/scraperFunctions.ts'
 
 
 const repostCount = ref(0);
@@ -1004,10 +1005,15 @@ const executeSearch = async (currentSearch: any, viewSearch: boolean) => {
                     }
                     else {
                         try {
-                            const scraperFunction = new Function(`
+                            // const scraperFunction = new Function(`
+                            //     ${code}
+                            //     return typeof scrape !== 'undefined' ? scrape : null;
+                            // `)();
+                            const scraperFunction = new Function('browser', 'seenIds', `
                                 ${code}
+                                //# sourceURL=${scraperData.name.replace(/\s/g, "_")}.js
                                 return typeof scrape !== 'undefined' ? scrape : null;
-                            `)();
+                            `)(browser, seenJobs.get(scraperConfig.scraperId) || new Set<string>());
 
                             if (typeof scraperFunction === 'function') {
                                 scraperPromiseStatus.value[scraperId] = 'pending';

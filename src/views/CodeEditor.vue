@@ -10,7 +10,7 @@
         <input v-model="scraperName" placeholder="Enter your scraper name..." :readOnly="isViewingPublicScraper">
         <div class="code-area">
             <div>Code</div>
-            <VueMonacoEditor language="javascript" v-model:value="code" @change="uploadToFile"
+            <VueMonacoEditor language="javascript" v-model:value="code" @change="autoSave"
                 placeholder="Enter your code here..." :options="{
                     readOnly: isViewingPublicScraper
                 }"></VueMonacoEditor>
@@ -32,26 +32,28 @@
         </div>
         <img v-if="faviconUrl" :src="`https://www.google.com/s2/favicons?domain=${faviconUrl}&sz=128`"
             alt="Scraper Icon" width="32" height="32">
-        <button v-if="!isViewingPublicScraper && currentScraper && !currentScraper.public_id"
-            @click="publishScraper">Publish</button>
-        <button v-else-if="!isViewingPublicScraper && currentScraper && currentScraper.public_id"
-            @click="unpublishScraper">Unpublish</button>
-        <div v-if="!isViewingPublicScraper && currentScraper?.absolutePath">Local File Path: {{
-            currentScraper.absolutePath }}</div>
+        <div v-if="!isViewingPublicScraper && currentScraper?.absolutePath">
+            {{typeof(currentScraper.absolutePath) === 'object' ? 'File Name: ' + JSON.stringify(currentScraper?.absolutePath.name) : 'Local File Path: ' + currentScraper?.absolutePath }}</div>
         <div class="buttons">
             <button v-if="!isViewingPublicScraper" @click="saveScraper">Save</button>
             <SaveMessage ref="saveMessageRef" message="Scraper saved successfully!" />
-            <button v-if="!isViewingPublicScraper" @click="chooseLocalFile">
+            <button v-if="!isViewingPublicScraper" @click="chooseLocalFile" :disabled="!scraperId">
                 {{ currentScraper?.absolutePath ? "Change Local File" : "Sync Local File" }}
             </button>
             <button v-if="!isViewingPublicScraper && currentScraper && currentScraper.absolutePath"
-                @click="loadLocalScraper">Reload Local
-                File</button>
-            <button @click="openRunMenu">Run</button>
-            <button v-if="!isViewingPublicScraper" @click="confirmDelete = true">Delete</button>
-            <button @click="enableDebugger">Enable Debugger</button>
-            <!-- Security error on Firefox when trying to open this link...
-            <a href="about:debugging#/runtime/this-firefox" target="_blank">Check Debugger</a> -->
+                @click="uploadToFile" :disabled="autoSaveSetting">Save to Original File</button>
+            <div>
+                Auto Save to Original File<input type="checkbox" v-model=autoSaveSetting>
+            </div>
+            <button v-if="!isViewingPublicScraper && currentScraper && currentScraper.absolutePath"
+                @click="loadLocalScraper">Load From Original File</button>
+            <button @click="openRunMenu" :disabled="!scraperId">Run</button>
+            <button v-if="!isViewingPublicScraper" @click="confirmDelete = true" :disabled="!scraperId">Delete</button>
+            <button @click="enableDebugger" :disabled="!scraperId">Enable Debugger</button>
+            <button v-if="!isViewingPublicScraper && currentScraper && !currentScraper.public_id"
+            @click="publishScraper">Publish</button>
+            <button v-else-if="!isViewingPublicScraper && currentScraper && currentScraper.public_id"
+            @click="unpublishScraper">Unpublish</button>
         </div>
         <div v-if="output" class="output">
             <div>Output Count: {{ outputCount }}</div>
@@ -86,11 +88,13 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
 import { getStorageObject, updateStorageObject, createStorageObject, removeStorageObject } from '../services/storageService'
-import { MY_SCRAPERS } from '../services/storeNames'
+import { MY_HANDLES, MY_SCRAPERS } from '../services/storeNames'
 import { supabase } from '../../utils/supabase';
 import SaveMessage from "../components/SaveMessage.vue";
+import { browser } from '../scripts/scraperFunctions'
 
 const code = ref('');
+const lastSyncedCode = ref('');
 const scraperName = ref('');
 const error = ref('');
 const outputCount = ref(0);
@@ -111,6 +115,7 @@ const scraperId = ref<number | null>(null);
 const faviconUrl = ref<string>('');
 let isViewingPublicScraper = ref(false);
 const saveMessageRef = ref<any>(null);
+const autoSaveSetting = ref<boolean>(false);
 
 
 onMounted(async () => {
@@ -133,8 +138,11 @@ onMounted(async () => {
         throw new Error('No scraper id provided')
     }
 
+    currentScraper.value.absolutePath = (await getStorageObject(MY_HANDLES, scraperId.value))?.absolutePath || null;
+    
     scraperName.value = currentScraper.value.name || ''
     code.value = currentScraper.value.code || ''
+    lastSyncedCode.value = code.value
     parameters.value = currentScraper.value.editor_run_args || []
     jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
     runInBackground.value = currentScraper.value.runInBackground || false
@@ -197,9 +205,10 @@ const saveScraper = async () => {
             icon: iconValue,
             notes: notes.value,
             runInBackground: runInBackground.value,
-            absolutePath: currentScraper.value?.absolutePath || ''
         });
-        currentScraper.value = { absolutePath: currentScraper.value?.absolutePath || '' };
+
+        //currentScraper.value = { absolutePath: currentScraper.value?.absolutePath || '' };
+
     }
     else {
         await updateStorageObject(MY_SCRAPERS, scraperId.value, {
@@ -210,7 +219,6 @@ const saveScraper = async () => {
             runInBackground: runInBackground.value,
             icon: iconValue,
             notes: notes.value,
-            absolutePath: currentScraper.value?.absolutePath || ''
         });
     }
 
@@ -225,9 +233,66 @@ const saveScraper = async () => {
     }
 }
 
+
+let saveTimeout: number | undefined;
+
+const autoSave = async () => {
+    if(autoSaveSetting.value)
+        uploadToFile();
+}
+const verifyWritePermission = async (fileHandle: any): Promise<boolean> => {
+    let permission = await fileHandle.queryPermission({
+        mode: "readwrite",
+    });
+    if (permission !== "granted") {
+        permission = await fileHandle.requestPermission({
+            mode: "readwrite",
+        });
+    }
+    if(permission !== 'granted'){
+        alert('Error: Please manually allow access to file editing in the site settings')
+    }
+    return permission === "granted";
+}
+
 const uploadToFile = async () => {
-    if (currentScraper.value?.absolutePath)
-        await sendNativeFileAction({ type: 'SAVE_FILE', name: scraperName.value, code: code.value, absolutePath: currentScraper.value?.absolutePath });
+    if(!currentScraper.value?.absolutePath){
+        return;
+    }
+    clearTimeout(saveTimeout);
+
+    saveTimeout = window.setTimeout(async () => {
+
+        if('showOpenFilePicker' in window){
+            const fileHandle = currentScraper.value?.absolutePath;
+            let writable;
+            try {
+                writable = await fileHandle.createWritable();
+            } catch (err) {
+                const hasPermission = await verifyWritePermission(fileHandle);
+                if (hasPermission) {
+                    try {
+                        writable = await fileHandle.createWritable();
+                    } catch (retryErr) {
+                        console.error("Failed to obtain writable after permission granted:", retryErr);
+                    }
+                } else {
+                    console.error("Permission denied to write to local file");
+                }
+            }
+            if (writable) {
+                await writable.write(code.value);
+                await writable.close();
+                lastSyncedCode.value = code.value;
+            }
+        }
+
+        else {
+            await sendNativeFileAction({ type: 'SAVE_FILE', name: scraperName.value, code: code.value, absolutePath: currentScraper.value?.absolutePath });
+            lastSyncedCode.value = code.value;
+        }
+
+    }, 500);
 }
 
 const sendNativeFileAction = (actionPayload: any): Promise<any> => {
@@ -258,43 +323,95 @@ const sendNativeFileAction = (actionPayload: any): Promise<any> => {
 };
 
 const chooseLocalFile = async () => {
-    const result = await sendNativeFileAction({ type: 'CHOOSE_FILE' });
-    if (result.status === 'success' && result.absolutePath) {
-        if (!currentScraper.value) {
-            currentScraper.value = {};
+    // File System Access API is supported
+    if ('showOpenFilePicker' in window) {
+        // User picks a file
+        if (!scraperId.value)
+            return;
+        //let fileHandle = currentScraper.value?.absolutePath || null;
+        let fileHandle
+        [fileHandle] = await window.showOpenFilePicker();
+        await createStorageObject(MY_HANDLES, {id: scraperId.value, absolutePath: fileHandle}, false );
+        
+        const hasPermission = await verifyWritePermission(fileHandle);
+        if (!hasPermission) {
+            console.error("Permission denied");
+            return;
         }
-        currentScraper.value.absolutePath = result.absolutePath;
-        code.value = result.code || code.value;
+        const file = await fileHandle.getFile();
+        const content = await file.text();
+        code.value = content;
+        lastSyncedCode.value = content;
+        currentScraper.value.absolutePath = fileHandle;
 
-        if (scraperId.value) {
-            await updateStorageObject(MY_SCRAPERS, scraperId.value, {
-                ...currentScraper.value,
-                code: code.value,
-                absolutePath: currentScraper.value.absolutePath
-            });
-        }
+    } else {
+        // Fallback for Firefox, etc.
+        const result = await sendNativeFileAction({ type: 'CHOOSE_FILE' });
+        if (result.status === 'success' && result.absolutePath) {
+            if (!currentScraper.value) {
+                currentScraper.value = {};
+            }
+            currentScraper.value.absolutePath = result.absolutePath;
+            code.value = result.code || code.value;
+            lastSyncedCode.value = code.value;
+
+            if (scraperId.value) {
+                await updateStorageObject(MY_SCRAPERS, scraperId.value, {
+                    ...currentScraper.value,
+                    code: code.value,
+                    absolutePath: currentScraper.value.absolutePath
+                });
+            }
     } else if (result.status !== 'canceled') {
         alert("Failed to pick file: " + (result.error || result.status));
+    }
     }
 }
 
 const loadLocalScraper = async () => {
-    if (!scraperName.value) return;
-    const result = await sendNativeFileAction({
-        type: 'LOAD_FILE',
-        name: scraperName.value,
-        absolutePath: currentScraper.value?.absolutePath
-    });
-    if (result.status === 'success' && result.code) {
-        code.value = result.code;
-        if (scraperId.value) {
-            await updateStorageObject(MY_SCRAPERS, scraperId.value, {
-                ...currentScraper.value,
-                code: code.value
-            });
+    if('showOpenFilePicker' in window){
+        if (!scraperId.value || isViewingPublicScraper.value) return;
+        if (currentScraper.value?.absolutePath && typeof currentScraper.value.absolutePath.getFile === 'function') {
+            try {
+                let file = await currentScraper.value.absolutePath.getFile();
+                if(!file){
+                    const hasPermission = await verifyWritePermission(currentScraper.value.absolutePath);
+                    if (hasPermission) {
+                        file = await currentScraper.value.absolutePath.getFile();
+                    } else {
+                        console.error("Permission denied to read file");
+                        return;
+                    }
+                }
+                const content = await file.text();
+                if (content !== lastSyncedCode.value) {
+                    code.value = content;
+                    lastSyncedCode.value = content;
+                }
+            } catch (error) {
+                console.error('Error reading file:', error)
+            }
         }
-    } else {
-        console.warn("Failed to load local file via native messaging:", result.error || result.status);
+    }else{
+        if(!scraperName.value)
+            return;
+        const result = await sendNativeFileAction({
+            type: 'LOAD_FILE',
+            name: scraperName.value,
+            absolutePath: currentScraper.value?.absolutePath
+        });
+        if (result.status === 'success' && result.code) {
+            code.value = result.code;
+            lastSyncedCode.value = result.code;
+            if (scraperId.value) {
+                await updateStorageObject(MY_SCRAPERS, scraperId.value, {
+                    ...currentScraper.value,
+                    code: code.value
+                });
+            }
+        } else {
+            console.warn("Failed to load local file via native messaging:", result.error || result.status);
+        }
     }
 }
 
@@ -311,14 +428,22 @@ const getParameterNames = () => {
 }
 
 const enableDebugger = () => {
-    window.postMessage({
-        type: 'enable-debugger',
-        payload: JSON.parse(JSON.stringify({
-            scraperName: scraperName.value,
-            code: code.value,
-            parameters: parameters.value
-        }))
-    }, '*');
+    if(runInBackground.value)
+        window.postMessage({
+            type: 'enable-debugger',
+            payload: JSON.parse(JSON.stringify({
+                scraperName: scraperName.value,
+                code: code.value,
+                parameters: parameters.value
+            }))
+        }, '*');
+    else{
+        const scraperLoader = new Function('browser', 'seenIds', `
+                ${code.value}
+                //# sourceURL=${scraperName.value.replace(/\s/g, "_")}.js
+                return typeof scrape !== 'undefined' ? scrape : null;
+            `);
+    }
 }
 
 const openRunMenu = () => {
@@ -400,12 +525,14 @@ const runScraper = async (inBackground: boolean = false) => {
     } else {
         try {
 
-            const scraperLoader = new Function(`
+            const scraperLoader = new Function('browser', 'seenIds', `
                     ${code.value}
+                    //# sourceURL=${scraperName.value.replace(/\s/g, "_")}.js
                     return typeof scrape !== 'undefined' ? scrape : null;
                 `);
 
-            const scrapeFunction = scraperLoader();
+
+            const scrapeFunction = scraperLoader(browser, new Set());
 
             if (typeof scrapeFunction === 'function') {
                 const args = getParameterNames().map(name => parameters.value[name]);
