@@ -16,7 +16,7 @@ export interface StorageProvider {
 }
 
 const DB_NAME = 'JobAggregatorDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 const upgradeStrategy = (request: IDBOpenDBRequest) => {
     const db = request.result;
@@ -200,7 +200,7 @@ export async function getStorageObject(storeName: string, key: string | number):
  * Stringifies data to strip Vue Proxies (deeply) for IndexedDB compatibility.
  */
 // if you want to use a custom key, you could just call updateStorageObject directly... but I'll leave this since some code relies on this function.
-export async function createStorageObject(storeName: string, value: any, serialize: boolean = false): Promise<number> {
+export async function createStorageObject(storeName: string, value: any, serialize: boolean = true): Promise<number> {
     return await storage.create(storeName, serialize ? toPlainObject(value) : value);
 }
 

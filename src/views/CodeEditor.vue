@@ -7,30 +7,30 @@
         <div v-if="error" class="error">
             {{ error }}
         </div>
-        <input v-model="scraperName" placeholder="Enter your scraper name..." :readOnly="isViewingPublicScraper">
+        <input v-model="currentScraper.name" placeholder="Enter your scraper name..." :readOnly="isViewingPublicScraper">
         <div class="code-area">
             <div>Code</div>
-            <VueMonacoEditor language="javascript" v-model:value="code" @change="autoSave"
+            <VueMonacoEditor language="javascript" v-model:value="currentScraper.code" @change="autoSave"
                 placeholder="Enter your code here..." :options="{
                     readOnly: isViewingPublicScraper
                 }"></VueMonacoEditor>
         </div>
         <div> Notes </div>
-        <textarea v-model="notes" placeholder="Enter any notes about the scraper..."
+        <textarea v-model="currentScraper.notes" placeholder="Enter any notes about the scraper..."
             :readOnly="isViewingPublicScraper"></textarea>
         <div>Job URL</div>
-        <input v-model="jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}"
+        <input v-model="currentScraper.jobLinkTemplate" placeholder="e.g. indeed.com/viewjob?jk={id}"
             :readOnly="isViewingPublicScraper">
         <div class="run-in-background">
-            <input v-model="runInBackground" type="checkbox" :disabled="isViewingPublicScraper"> Run in Background
+            <input v-model="currentScraper.runInBackground" type="checkbox" :disabled="isViewingPublicScraper"> Run in Background
         </div>
         <div>Scraper Icon</div>
         <!-- <input type="file" @change="handleFileUpload" accept="image/*"> -->
         <div class="icon-input-group">
-            <input type="text" v-model="faviconUrl" placeholder="Enter domain (e.g. google.com)"
+            <input type="text" v-model="currentScraper.icon" placeholder="Enter domain (e.g. google.com)"
                 :readOnly="isViewingPublicScraper">
         </div>
-        <img v-if="faviconUrl" :src="`https://www.google.com/s2/favicons?domain=${faviconUrl}&sz=128`"
+        <img v-if="currentScraper.icon" :src="`https://www.google.com/s2/favicons?domain=${currentScraper.icon}&sz=128`"
             alt="Scraper Icon" width="32" height="32">
         <div v-if="!isViewingPublicScraper && currentScraper?.absolutePath">
             {{typeof(currentScraper.absolutePath) === 'object' ? 'File Name: ' + JSON.stringify(currentScraper?.absolutePath.name) : 'Local File Path: ' + currentScraper?.absolutePath }}</div>
@@ -45,15 +45,21 @@
             <div>
                 Auto Save to Original File<input type="checkbox" v-model=autoSaveSetting>
             </div>
-            <button v-if="!isViewingPublicScraper && currentScraper && currentScraper.absolutePath"
+            <button v-if="!isViewingPublicScraper && currentScraper && currentScraper.absolutePath" :disabled="autoLoadSetting"
                 @click="loadLocalScraper">Load From Original File</button>
+            <div>
+                Auto Load from Original File <input type="checkbox" v-model=autoLoadSetting>
+            </div>
             <button @click="openRunMenu" :disabled="!scraperId">Run</button>
             <button v-if="!isViewingPublicScraper" @click="confirmDelete = true" :disabled="!scraperId">Delete</button>
             <button @click="enableDebugger" :disabled="!scraperId">Enable Debugger</button>
             <button v-if="!isViewingPublicScraper && currentScraper && !currentScraper.public_id"
             @click="publishScraper">Publish</button>
-            <button v-else-if="!isViewingPublicScraper && currentScraper && currentScraper.public_id"
-            @click="unpublishScraper">Unpublish</button>
+            <template v-else-if="!isViewingPublicScraper && currentScraper?.public_id">
+                <button @click="unpublishScraper">Unpublish</button>
+                <button @click="updateScraper">Update</button>
+            </template>
+
         </div>
         <div v-if="output" class="output">
             <div>Output Count: {{ outputCount }}</div>
@@ -68,7 +74,7 @@
                 <label :for="name">{{ name }}</label>
                 <input :id="name" v-model="parameters[name]" />
             </div>
-            <button @click="runScraper(runInBackground)">Run</button>
+            <button @click="runScraper(currentScraper.runInBackground)">Run</button>
         </div>
     </div>
     <div class="dimmed-background" v-if="confirmDelete">
@@ -84,7 +90,7 @@
 
 <script setup lang="ts">
 import { VueMonacoEditor } from '@guolao/vue-monaco-editor';
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import type { ScraperParameter } from '../models'
 import { onBeforeRouteLeave } from 'vue-router'
 import { getStorageObject, updateStorageObject, createStorageObject, removeStorageObject } from '../services/storageService'
@@ -93,36 +99,46 @@ import { supabase } from '../../utils/supabase';
 import SaveMessage from "../components/SaveMessage.vue";
 import { browser } from '../scripts/scraperFunctions'
 
-const code = ref('');
 const lastSyncedCode = ref('');
-const scraperName = ref('');
 const error = ref('');
 const outputCount = ref(0);
-const notes = ref('');
-const jobLinkTemplate = ref('');
 const output = ref('');
 const runMenu = ref(false);
 const parameters = ref<ScraperParameter>({});
-let originalName: string | null = null;
 const confirmDelete = ref(false);
-let originalCodeValue: string | undefined = undefined;
-let originalJobLinkTemplateValue: string | undefined = undefined;
-let originalRunInBackgroundValue: boolean | undefined = undefined;
-let originalNotesValue: string | undefined = undefined;
-const runInBackground = ref(false);
-const currentScraper = ref<any>(null);
+const currentScraper = ref<any>({
+    name: '',
+    code: '',
+    editor_run_args: [],
+    jobLinkTemplate: '',
+    runInBackground: false,
+    notes: '',
+    icon: '', 
+    absolutePath: null
+});
 const scraperId = ref<number | null>(null);
-const faviconUrl = ref<string>('');
 let isViewingPublicScraper = ref(false);
 const saveMessageRef = ref<any>(null);
 const autoSaveSetting = ref<boolean>(false);
+const autoLoadSetting = ref<boolean>(false);
 
+let originalState = '';
+
+const snapshotScraper = () => {
+    const { absolutePath, editor_run_args, ...rest } = currentScraper.value;
+    return JSON.stringify(rest);
+};
+
+const isDirty = () => snapshotScraper() !== originalState;
 
 onMounted(async () => {
     const urlParams = new URLSearchParams(window.location.search)
     scraperId.value = Number(urlParams.get('scraper-id')) || null
     if (scraperId.value) {
-        currentScraper.value = await getStorageObject(MY_SCRAPERS, scraperId.value)
+        const scraper = await getStorageObject(MY_SCRAPERS, scraperId.value)
+        if (scraper) {
+            currentScraper.value = { ...currentScraper.value, ...scraper }
+        }
     }
     else if (scraperId.value = Number(urlParams.get('public-scraper-id'))) {
         isViewingPublicScraper.value = true;
@@ -131,7 +147,7 @@ onMounted(async () => {
             .select('*')
             .eq('id', scraperId.value)
         if (scrapeItems && scrapeItems[0]) {
-            currentScraper.value = scrapeItems[0];
+            currentScraper.value = { ...currentScraper.value, ...scrapeItems[0] };
         }
     }
     else {
@@ -140,30 +156,17 @@ onMounted(async () => {
 
     currentScraper.value.absolutePath = (await getStorageObject(MY_HANDLES, scraperId.value))?.absolutePath || null;
     
-    scraperName.value = currentScraper.value.name || ''
-    code.value = currentScraper.value.code || ''
-    lastSyncedCode.value = code.value
+    lastSyncedCode.value = currentScraper.value.code || ''
     parameters.value = currentScraper.value.editor_run_args || []
-    jobLinkTemplate.value = currentScraper.value.jobLinkTemplate || ''
-    runInBackground.value = currentScraper.value.runInBackground || false
-    notes.value = currentScraper.value.notes || ''
-
-    if (currentScraper.value.icon) {
-        faviconUrl.value = currentScraper.value.icon.includes('?domain=') ? currentScraper.value.icon.split('?domain=')[1].split('&')[0] : currentScraper.value.icon;
-    }
 
     if (!isViewingPublicScraper.value)
         await loadLocalScraper();
 
     // Set value after data is loaded so we have the correct base for comparison
-    originalName = scraperName.value;
-    originalCodeValue = code.value;
-    originalJobLinkTemplateValue = jobLinkTemplate.value;
-    originalRunInBackgroundValue = runInBackground.value;
-    originalNotesValue = notes.value;
+    originalState = snapshotScraper();
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-        if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue || runInBackground.value !== originalRunInBackgroundValue || notes.value !== originalNotesValue) {
+        if (isDirty()) {
             event.preventDefault();
             event.returnValue = '';
         }
@@ -174,10 +177,28 @@ onMounted(async () => {
     onUnmounted(() => {
         window.removeEventListener('beforeunload', handleBeforeUnload);
     });
+    let observer: FileSystemObserver | undefined;
+    watch(autoLoadSetting, () =>{
+        if(autoLoadSetting.value === true){
+            if(typeof(currentScraper.value.absolutePath) === 'object') {
+                if('FileSystemObserver' in window) {
+                    const callback = async (records: any, observer: any) => {
+                        const file = await currentScraper.value.absolutePath.getFile();
+                        currentScraper.value.code = await file.text();
+                    }
+                    observer = new FileSystemObserver(callback);
+                    observer.observe(currentScraper.value.absolutePath);
+                }
+            }
+        }
+        else{
+            if(observer) observer.disconnect();
+        }
+    })
 })
 
 onBeforeRouteLeave((to, from, next) => {
-    if (code.value !== originalCodeValue || scraperName.value !== originalName || jobLinkTemplate.value !== originalJobLinkTemplateValue) {
+    if (isDirty()) {
         const answer = window.confirm('You have unsaved changes. Do you really want to leave?');
         if (!answer) return next(false);
     }
@@ -192,42 +213,26 @@ const deleteScraper = async () => {
 }
 
 const saveScraper = async () => {
-    if (!scraperName.value) {
+    if (!currentScraper.value.name) {
         error.value = 'Please enter a scraper name'
         return
     }
-    const iconValue = faviconUrl.value ? (faviconUrl.value.startsWith('http') ? faviconUrl.value : `https://www.google.com/s2/favicons?domain=${faviconUrl.value}&sz=128`) : '';
     if (!scraperId.value) {
         scraperId.value = await createStorageObject(MY_SCRAPERS, {
-            name: scraperName.value,
-            code: code.value,
-            jobLinkTemplate: jobLinkTemplate.value,
-            icon: iconValue,
-            notes: notes.value,
-            runInBackground: runInBackground.value,
+            ...currentScraper.value,
         });
-
-        //currentScraper.value = { absolutePath: currentScraper.value?.absolutePath || '' };
 
     }
     else {
         await updateStorageObject(MY_SCRAPERS, scraperId.value, {
-            name: scraperName.value,
-            code: code.value,
-            jobLinkTemplate: jobLinkTemplate.value,
-            parameters: getParameterNames(),
-            runInBackground: runInBackground.value,
-            icon: iconValue,
-            notes: notes.value,
+            ...currentScraper.value,
+            parameters: getParameterNames()
         });
     }
 
     // Sync to local filesystem via extension native messaging
 
-    originalName = scraperName.value;
-    originalCodeValue = code.value;
-    originalJobLinkTemplateValue = jobLinkTemplate.value;
-    originalRunInBackgroundValue = runInBackground.value;
+    originalState = snapshotScraper();
     if (saveMessageRef.value) {
         saveMessageRef.value.show();
     }
@@ -240,6 +245,7 @@ const autoSave = async () => {
     if(autoSaveSetting.value)
         uploadToFile();
 }
+
 const verifyWritePermission = async (fileHandle: any): Promise<boolean> => {
     let permission = await fileHandle.queryPermission({
         mode: "readwrite",
@@ -281,15 +287,15 @@ const uploadToFile = async () => {
                 }
             }
             if (writable) {
-                await writable.write(code.value);
+                await writable.write(currentScraper.value.code);
                 await writable.close();
-                lastSyncedCode.value = code.value;
+                lastSyncedCode.value = currentScraper.value.code;
             }
         }
 
         else {
-            await sendNativeFileAction({ type: 'SAVE_FILE', name: scraperName.value, code: code.value, absolutePath: currentScraper.value?.absolutePath });
-            lastSyncedCode.value = code.value;
+            await sendNativeFileAction({ type: 'SAVE_FILE', name: currentScraper.value.name, code: currentScraper.value.code, absolutePath: currentScraper.value?.absolutePath });
+            lastSyncedCode.value = currentScraper.value.code;
         }
 
     }, 500);
@@ -340,7 +346,7 @@ const chooseLocalFile = async () => {
         }
         const file = await fileHandle.getFile();
         const content = await file.text();
-        code.value = content;
+        currentScraper.value.code = content;
         lastSyncedCode.value = content;
         currentScraper.value.absolutePath = fileHandle;
 
@@ -352,13 +358,13 @@ const chooseLocalFile = async () => {
                 currentScraper.value = {};
             }
             currentScraper.value.absolutePath = result.absolutePath;
-            code.value = result.code || code.value;
-            lastSyncedCode.value = code.value;
+            currentScraper.value.code = result.code || currentScraper.value.code;
+            lastSyncedCode.value = currentScraper.value.code;
 
             if (scraperId.value) {
                 await updateStorageObject(MY_SCRAPERS, scraperId.value, {
                     ...currentScraper.value,
-                    code: code.value,
+                    code: currentScraper.value.code,
                     absolutePath: currentScraper.value.absolutePath
                 });
             }
@@ -385,7 +391,7 @@ const loadLocalScraper = async () => {
                 }
                 const content = await file.text();
                 if (content !== lastSyncedCode.value) {
-                    code.value = content;
+                    currentScraper.value.code = content;
                     lastSyncedCode.value = content;
                 }
             } catch (error) {
@@ -393,20 +399,20 @@ const loadLocalScraper = async () => {
             }
         }
     }else{
-        if(!scraperName.value)
+        if(!currentScraper.value.name)
             return;
         const result = await sendNativeFileAction({
             type: 'LOAD_FILE',
-            name: scraperName.value,
+            name: currentScraper.value.name,
             absolutePath: currentScraper.value?.absolutePath
         });
         if (result.status === 'success' && result.code) {
-            code.value = result.code;
+            currentScraper.value.code = result.code;
             lastSyncedCode.value = result.code;
             if (scraperId.value) {
                 await updateStorageObject(MY_SCRAPERS, scraperId.value, {
                     ...currentScraper.value,
-                    code: code.value
+                    code: currentScraper.value.code
                 });
             }
         } else {
@@ -416,31 +422,31 @@ const loadLocalScraper = async () => {
 }
 
 const getParameterNames = () => {
-    const match = code.value.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
-        code.value.match(/const\s+scrape\s*=\s*(?:async\s*)?\(([^)]*)\)/);
+    const match = currentScraper.value.code.match(/(?:async\s+)?function\*?\s+scrape\s*\(([^)]*)\)/) ||
+        currentScraper.value.code.match(/const\s+scrape\s*=\s*(?:async\s*)?\(([^)]*)\)/);
     if (match) {
         const names = (match[1] || '').split(',')
-            .map(p => (p.split('=')[0] || '').trim())
-            .filter(p => p);
+            .map((p: string) => (p.split('=')[0] || '').trim())
+            .filter((p: string) => p);
         return names;
     }
     return [];
 }
 
 const enableDebugger = () => {
-    if(runInBackground.value)
+    if(currentScraper.value.runInBackground)
         window.postMessage({
             type: 'enable-debugger',
             payload: JSON.parse(JSON.stringify({
-                scraperName: scraperName.value,
-                code: code.value,
+                scraperName: currentScraper.value.name,
+                code: currentScraper.value.code,
                 parameters: parameters.value
             }))
         }, '*');
     else{
         const scraperLoader = new Function('browser', 'seenIds', `
-                ${code.value}
-                //# sourceURL=${scraperName.value.replace(/\s/g, "_")}.js
+                ${currentScraper.value.code}
+                //# sourceURL=${currentScraper.value.name.replace(/\s/g, "_")}.js
                 return typeof scrape !== 'undefined' ? scrape : null;
             `);
     }
@@ -450,7 +456,7 @@ const openRunMenu = () => {
     runMenu.value = true;
     const names = getParameterNames();
     const newParams: ScraperParameter = {};
-    names.forEach(name => {
+    names.forEach((name: string) => {
         newParams[name] = parameters.value[name] || '';
     });
     parameters.value = newParams;
@@ -511,9 +517,9 @@ const runScraper = async (inBackground: boolean = false) => {
                 window.postMessage({
                     type: 'run-scraper-event',
                     payload: {
-                        scraperName: scraperName.value,
-                        code: code.value,
-                        parameters: getParameterNames().map(name => parameters.value[name])
+                        scraperName: currentScraper.value.name,
+                        code: currentScraper.value.code,
+                        parameters: getParameterNames().map((name: string) => parameters.value[name])
                     }
                 }, '*');
             });
@@ -526,8 +532,8 @@ const runScraper = async (inBackground: boolean = false) => {
         try {
 
             const scraperLoader = new Function('browser', 'seenIds', `
-                    ${code.value}
-                    //# sourceURL=${scraperName.value.replace(/\s/g, "_")}.js
+                    ${currentScraper.value.code}
+                    //# sourceURL=${currentScraper.value.name.replace(/\s/g, "_")}.js
                     return typeof scrape !== 'undefined' ? scrape : null;
                 `);
 
@@ -535,7 +541,7 @@ const runScraper = async (inBackground: boolean = false) => {
             const scrapeFunction = scraperLoader(browser, new Set());
 
             if (typeof scrapeFunction === 'function') {
-                const args = getParameterNames().map(name => parameters.value[name]);
+                const args = getParameterNames().map((name: string) => parameters.value[name]);
                 for await (const job of scrapeFunction(...args)) {
                     output.value += JSON.stringify(job, null, 2) + '\n';
                     outputCount.value++;
@@ -569,14 +575,8 @@ const publishScraper = async () => {
         return;
     }
     const userId = session.session.user.id;
-    const iconValue = faviconUrl.value ? (faviconUrl.value.startsWith('http') ? faviconUrl.value : `https://www.google.com/s2/favicons?domain=${faviconUrl.value}&sz=128`) : '';
     const { data, error } = await supabase.from('Public Scrapers').insert({
-        name: scraperName.value,
-        code: code.value,
-        jobLinkTemplate: jobLinkTemplate.value,
-        icon: iconValue,
-        notes: notes.value,
-        runInBackground: runInBackground.value,
+        ...currentScraper.value,
         user_id: userId,
         parameters: JSON.stringify(getParameterNames())
     }).select();
@@ -585,6 +585,29 @@ const publishScraper = async () => {
     }
     if (error) {
         alert('Error publishing scraper: ' + error.message)
+        return
+    }
+    await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value)
+}
+
+const updateScraper = async () => {
+    if (!scraperId.value) {
+        alert('Scraper ID is not defined');
+        return;
+    }
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) {
+        alert('You are not logged in. Please log in to publish scraper.');
+        return;
+    }
+    const userId = session.session.user.id;
+    const { data, error } = await supabase.from('Public Scrapers').update({
+        ...currentScraper.value,
+        user_id: userId,
+        parameters: JSON.stringify(getParameterNames())
+    }).eq('id', currentScraper.value.public_id).select();
+    if (error) {
+        alert('Error updating scraper: ' + error.message)
         return
     }
     await updateStorageObject(MY_SCRAPERS, scraperId.value, currentScraper.value)
